@@ -1,4 +1,4 @@
-# SuperSnaps — Purchase Timeline & Expense Tracker
+# SuperSnaps
 
 ## Run it
 ```
