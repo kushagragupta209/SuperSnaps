@@ -1,0 +1,9 @@
+Flask>=3.0
+requests>=2.31
+
+# Optional — only needed for the local OCR fallback when a screenshot is
+# uploaded but Groq isn't configured / the vision call fails. The app runs
+# fine without these; parse_expense_screenshot() just returns [] from the
+# OCR path (source="ocr", no items) until they're installed.
+pytesseract>=0.3.10
+Pillow>=10.0

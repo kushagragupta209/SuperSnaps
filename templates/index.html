@@ -1,0 +1,1808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Super Snaps — Personal Finance Workspace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root {
+    --paper-bg: #eee8d8;
+    --paper-light: #f8f4e9;
+    --paper-card: #f5f0e3;
+    --paper-card-2: #e9e2d2;
+    --paper-ink: #1e2a22;
+    --paper-muted: #6d786e;
+    --paper-line: rgba(30,42,34,.14);
+    --paper-green: #39734c;
+    --paper-green-dark: #275b39;
+    --paper-green-soft: #dbe9d9;
+    --paper-shadow: 0 10px 28px rgba(63,55,38,.09);
+    --paper-shadow-hover: 0 15px 38px rgba(63,55,38,.14);
+    --rust: #a95b42;
+    --font-display: 'Fraunces', serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(circle at 15% 8%, rgba(255,255,255,.72), transparent 28%),
+      radial-gradient(circle at 88% 12%, rgba(205,193,162,.28), transparent 25%),
+      repeating-linear-gradient(0deg, rgba(91,77,49,.025) 0, rgba(91,77,49,.025) 1px, transparent 1px, transparent 4px),
+      var(--paper-bg);
+    color: var(--paper-ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 40px 24px 120px; }
+
+  header.top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 1px solid var(--paper-line);
+    padding-bottom: 20px;
+    margin-bottom: 28px;
+  }
+  header.top .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--paper-green);
+    margin-bottom: 6px;
+  }
+  header.top h1 {
+    font-family: var(--font-display);
+    font-size: 40px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -.01em;
+  }
+  header.top .today {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--paper-muted);
+    text-align: right;
+  }
+
+  /* --- Navigation & Tabs --- */
+  .app-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 28px;
+    background: rgba(245,240,227,.92);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--paper-line);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; }
+  .brand-mark {
+    width: 32px; height: 32px; border-radius: 10px;
+    display: grid; place-items: center;
+    background: var(--paper-green); color: #fff; font-weight: 800;
+  }
+  .app-breadcrumb { font-size: 12px; color: var(--paper-muted); margin-left: 12px; }
+
+  .dashboard-tabs {
+    position: sticky;
+    top: 65px;
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 28px;
+    padding: 10px 0;
+    background: rgba(238,232,216,.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--paper-line);
+    overflow-x: auto;
+  }
+  .dashboard-tab {
+    padding: 8px 18px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--paper-muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s ease;
+  }
+  .dashboard-tab:hover { color: var(--paper-green-dark); background: rgba(255,255,255,.5); }
+  .dashboard-tab.active {
+    color: #fffdf5;
+    background: var(--paper-green);
+    border-color: var(--paper-green);
+    box-shadow: 0 4px 12px rgba(57,115,76,.2);
+  }
+
+  /* --- Workspace Panels --- */
+  .true-panel { display: none !important; }
+  .true-panel.active { display: block !important; animation: panelFade .2s ease; }
+  @keyframes panelFade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+
+  .workspace-title {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 18px;
+    padding-bottom: 14px; margin-bottom: 24px; border-bottom: 1px solid var(--paper-line);
+  }
+  .workspace-title h2 { margin: 0; font-family: var(--font-display); font-size: 26px; }
+  .workspace-title p { margin: 4px 0 0; color: var(--paper-muted); font-size: 13px; }
+  .workspace-kicker { color: var(--paper-green); font: 11px var(--font-mono); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px; }
+
+  /* --- Cards, Inputs, Buttons --- */
+  .card, .stat, .insights-card, .rec-card, .wishlist-item {
+    background: var(--paper-card);
+    border: 1px solid var(--paper-line);
+    border-radius: 14px;
+    padding: 22px 24px;
+    box-shadow: var(--paper-shadow);
+    margin-bottom: 20px;
+  }
+  .card h3 { font-family: var(--font-display); font-size: 18px; margin: 0 0 14px; }
+  .num { color: var(--paper-green); font-family: var(--font-mono); margin-right: 8px; font-weight: bold; }
+
+  label.field-label {
+    display: block; font-size: 11px; color: var(--paper-muted);
+    margin-bottom: 6px; font-family: var(--font-mono);
+    text-transform: uppercase; letter-spacing: .06em;
+  }
+  input[type=text], input[type=number], input[type=date], textarea {
+    width: 100%;
+    background: rgba(255,255,255,.6);
+    border: 1px solid var(--paper-line);
+    border-radius: 8px;
+    color: var(--paper-ink);
+    font-size: 14px;
+    padding: 10px 12px;
+    outline: none;
+    box-shadow: inset 0 1px 2px rgba(65,55,38,.035);
+  }
+  input:focus, textarea:focus { border-color: var(--paper-green); }
+  textarea { resize: vertical; min-height: 64px; }
+
+  .row { display: flex; gap: 10px; align-items: flex-end; }
+  .row > div { flex: 1; }
+
+  button {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    border-radius: 8px;
+    padding: 10px 16px;
+    cursor: pointer;
+    border: none;
+    transition: all .15s ease;
+  }
+  .btn-primary { background: var(--paper-green); color: #fff; font-weight: 600; }
+  .btn-primary:hover { background: var(--paper-green-dark); }
+  .btn-ghost { background: rgba(255,255,255,.45); border: 1px solid var(--paper-line); color: var(--paper-ink); }
+  .btn-ghost:hover { background: var(--paper-green-soft); border-color: var(--paper-green); }
+
+  .hint { font-size: 12px; color: var(--paper-muted); margin-top: 8px; line-height: 1.5; }
+  .chip {
+    font-family: var(--font-mono); font-size: 12px;
+    background: var(--paper-green-soft); color: var(--paper-green-dark);
+    border-radius: 999px; padding: 5px 12px; display: inline-block; margin-right: 6px;
+  }
+  .source-badge {
+    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
+    letter-spacing: .06em; padding: 3px 8px; border-radius: 999px;
+  }
+  .source-badge.groq { background: var(--paper-green-soft); color: var(--paper-green-dark); }
+  .source-badge.regex, .source-badge.rules { background: var(--paper-card-2); color: var(--paper-muted); }
+
+  /* --- Safe to Spend Meter --- */
+  .safe-meter-card {
+    background: linear-gradient(135deg, rgba(219,233,217,.7), rgba(245,240,227,.9));
+    border: 1px solid rgba(57,115,76,.3);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: var(--paper-shadow);
+  }
+  .safe-meter-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; align-items: center; }
+  .safe-value-display { font-family: var(--font-display); font-size: 38px; color: var(--paper-green); font-weight: 700; margin: 4px 0; }
+  .safe-progress-track { height: 10px; background: rgba(30,42,34,.1); border-radius: 999px; overflow: hidden; margin: 12px 0 6px; }
+  .safe-progress-fill { height: 100%; background: var(--paper-green); border-radius: 999px; transition: width .3s ease; }
+  .safe-stats-mini { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; font-size: 12px; }
+  .safe-stats-mini div { background: rgba(255,255,255,.5); padding: 10px 12px; border-radius: 8px; border: 1px solid var(--paper-line); }
+
+  /* --- Summaries & Grids --- */
+  .summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat .label { font-family: var(--font-mono); font-size: 11px; color: var(--paper-muted); text-transform: uppercase; }
+  .stat .value { font-family: var(--font-display); font-size: 26px; font-weight: 600; margin-top: 8px; color: var(--paper-ink); }
+  .stat .value.green { color: var(--paper-green); }
+  .stat .value.rust { color: var(--rust); }
+  .stat .sub { font-size: 11px; color: var(--paper-muted); margin-top: 4px; }
+
+  .breakdown-panel { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; }
+  .legend-list { list-style: none; margin: 0; padding: 0; }
+  .legend-list li {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; border-bottom: 1px dashed var(--paper-line); font-size: 13px;
+  }
+  .legend-list .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+  .legend-list .amt { font-family: var(--font-mono); color: var(--paper-green); }
+
+  /* --- Timeline --- */
+  .timeline { position: relative; padding-left: 30px; margin-top: 16px; }
+  .timeline::before {
+    content: ""; position: absolute; left: 8px; top: 4px; bottom: 4px;
+    width: 2px; background: linear-gradient(var(--paper-green), rgba(57,115,76,.1));
+  }
+  .tl-item { position: relative; padding: 0 0 20px 16px; }
+  .tl-item::before {
+    content: ""; position: absolute; left: -26px; top: 5px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--paper-bg); border: 2px solid var(--paper-green);
+  }
+  .tl-item .tl-date { font-family: var(--font-mono); font-size: 11px; color: var(--paper-muted); }
+  .tl-item .tl-row {
+    display: flex; justify-content: space-between; align-items: center;
+    background: rgba(255,255,255,.5); border: 1px solid var(--paper-line);
+    border-radius: 10px; padding: 10px 14px; margin-top: 6px;
+  }
+  .tl-item .tl-name { font-size: 14px; font-weight: 500; }
+  .tl-item .tl-price { font-family: var(--font-mono); color: var(--paper-green); font-size: 14px; }
+  .tl-del { background: none; border: none; color: var(--paper-muted); cursor: pointer; font-size: 15px; }
+  .tl-del:hover { color: var(--rust); }
+  .tl-empty { color: var(--paper-muted); font-size: 13px; padding: 16px 0; }
+
+  .day-total-row {
+    display: flex; justify-content: space-between; align-items: center;
+    background: rgba(255,255,255,.45); border: 1px solid var(--paper-line);
+    border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px;
+  }
+
+  /* --- Wishlist & What-If Simulator --- */
+  .wl-bar-track { height: 6px; border-radius: 999px; background: #d8d0be; margin-top: 8px; overflow: hidden; }
+  .wl-bar-fill { height: 100%; background: var(--paper-green); border-radius: 999px; }
+  .wishlist-item .wl-sub { font-size: 12px; color: var(--paper-muted); margin-top: 6px; font-family: var(--font-mono); }
+  .runway-import { background: var(--paper-green-soft); border: 1px solid var(--paper-line); border-radius: 14px; padding: 14px; margin-bottom: 16px; }
+  .runway-import .url-row { display:grid; grid-template-columns: 1fr auto; gap:10px; }
+  .runway-import small { display:block; margin-top:7px; color:var(--paper-muted); font-size:11px; }
+  .wishlist-meta { display:flex; gap:7px; align-items:center; flex-wrap:wrap; margin-top:5px; }
+  .platform-pill { display:inline-flex; align-items:center; padding:3px 7px; border-radius:999px; border:1px solid var(--paper-line); background:#fff; font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+  .price-history-wrap { margin-top:12px; border-top:1px dashed var(--paper-line); padding-top:10px; }
+  .price-history-canvas { width:100%; height:150px; }
+  .history-actions { display:flex; gap:7px; margin-top:7px; }
+  @media(max-width:760px){ .runway-import .url-row{grid-template-columns:1fr;} }
+  
+  .sim-box {
+    background: rgba(255,255,255,.55);
+    border: 1px solid var(--paper-line);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 20px;
+  }
+  .sim-result-card {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--paper-line);
+  }
+  .sim-metric strong { display: block; font-family: var(--font-display); font-size: 20px; color: var(--paper-green); margin-top: 4px; }
+  .sim-metric span { font-size: 11px; color: var(--paper-muted); font-family: var(--font-mono); text-transform: uppercase; }
+
+  /* Deal Evaluator Card */
+  .deal-card {
+    background: var(--paper-light);
+    border: 1px solid rgba(57,115,76,.3);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-top: 12px;
+  }
+  .deal-tag {
+    display: inline-block; font-size: 10px; font-family: var(--font-mono);
+    text-transform: uppercase; padding: 2px 8px; border-radius: 999px;
+    background: var(--paper-green-soft); color: var(--paper-green-dark); font-weight: 700;
+  }
+
+  /* Spend Cutter Card */
+  .cutter-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  .cutter-table th { text-align: left; font-family: var(--font-mono); font-size: 10px; color: var(--paper-muted); padding-bottom: 6px; }
+  .cutter-table td { padding: 6px 0; border-bottom: 1px dashed var(--paper-line); }
+
+  .rec-card .rec-top { display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; }
+  .rec-card .rec-cat {
+    display: inline-block; font-family: var(--font-mono); font-size: 10px;
+    color: var(--paper-green-dark); background: var(--paper-green-soft);
+    padding: 2px 8px; border-radius: 999px; margin-top: 6px;
+  }
+  .rec-card .rec-reason { font-size: 12px; color: var(--paper-muted); margin-top: 6px; }
+
+  /* --- Insights UI --- */
+  .verdict-badge { display: inline-block; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; margin-bottom: 12px; }
+  .verdict-badge.good { background: var(--paper-green-soft); color: var(--paper-green-dark); }
+  .verdict-badge.watch { background: #efe6c9; color: #8a6c28; }
+  .verdict-badge.overspending { background: #f0ddd5; color: var(--rust); }
+  .verdict-badge.unknown { background: var(--paper-card-2); color: var(--paper-muted); }
+  .suggestion-list { list-style: none; margin: 8px 0; padding: 0; }
+  .suggestion-list li { font-size: 13px; padding: 4px 0 4px 16px; position: relative; }
+  .suggestion-list li::before { content: "→"; position: absolute; left: 0; color: var(--paper-green); }
+  .budget-row { display: flex; gap: 14px; margin-top: 8px; }
+  .budget-box { flex: 1; background: rgba(255,255,255,.4); border: 1px solid var(--paper-line); border-radius: 10px; padding: 12px; }
+  .budget-box .label { font-family: var(--font-mono); font-size: 10px; color: var(--paper-muted); text-transform: uppercase; }
+  .budget-box .value { font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--paper-green); margin-top: 4px; }
+
+  /* --- FAB & Action Sheet & Modal --- */
+  .fab {
+    position: fixed; right: 32px; bottom: 32px; width: 56px; height: 56px;
+    border-radius: 50%; background: var(--paper-green); color: #fff;
+    font-size: 28px; line-height: 56px; text-align: center;
+    box-shadow: 0 10px 25px rgba(57,115,76,.3); cursor: pointer; z-index: 99;
+  }
+  .fab:hover { background: var(--paper-green-dark); }
+
+  .chat-fab {
+    position: fixed; right: 32px; bottom: 100px; width: 56px; height: 56px;
+    border-radius: 50%; background: #fff; color: var(--paper-green);
+    font-size: 24px; line-height: 56px; text-align: center;
+    box-shadow: 0 10px 25px rgba(57,115,76,.3); cursor: pointer; z-index: 99;
+    border: 1px solid var(--paper-line);
+  }
+  .chat-fab:hover { background: var(--paper-card); }
+
+  .chat-panel {
+    position: fixed; right: 32px; bottom: 168px; z-index: 100;
+    width: 340px; max-width: calc(100vw - 40px);
+    max-height: 460px; display: none; flex-direction: column;
+    background: var(--paper-card); border: 1px solid var(--paper-line);
+    border-radius: 16px; box-shadow: 0 20px 50px rgba(44,39,29,.25);
+    overflow: hidden;
+  }
+  .chat-panel.open { display: flex; }
+  .chat-panel-head {
+    display:flex; justify-content:space-between; align-items:center;
+    padding: 14px 16px; border-bottom: 1px solid var(--paper-line);
+    background: rgba(255,255,255,.5);
+  }
+  .chat-panel-head h3 { margin: 0; font-size: 14px; }
+  @media (max-width: 480px) {
+    .chat-fab { right: 20px; bottom: 92px; }
+    .chat-panel { right: 20px; left: 20px; width: auto; bottom: 156px; }
+  }
+
+  .action-sheet-overlay {
+    position: fixed; inset: 0; z-index: 1000; display: none;
+    align-items: flex-end; justify-content: center; padding: 20px;
+    background: rgba(44,39,29,.4); backdrop-filter: blur(4px);
+  }
+  .action-sheet-overlay.open { display: flex; }
+  .action-sheet {
+    width: min(480px, 100%); padding: 22px; border: 1px solid var(--paper-line);
+    border-radius: 20px; background: var(--paper-light); box-shadow: 0 -10px 40px rgba(0,0,0,.15);
+  }
+  .action-sheet-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .action-sheet-head h3 { margin: 0; font-family: var(--font-display); font-size: 20px; }
+  .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .action-item {
+    padding: 14px; border: 1px solid var(--paper-line); border-radius: 12px;
+    background: rgba(255,255,255,.5); text-align: left; cursor: pointer;
+  }
+  .action-item:hover { background: var(--paper-green-soft); border-color: var(--paper-green); }
+  .action-item strong { display: block; font-size: 13px; color: var(--paper-ink); }
+  .action-item span { display: block; font-size: 11px; color: var(--paper-muted); margin-top: 2px; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(44,39,29,.4);
+    display: none; align-items: center; justify-content: center; z-index: 1001;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--paper-light); border: 1px solid var(--paper-line); border-radius: 16px; padding: 24px; width: 340px; }
+  .modal h3 { font-family: var(--font-display); margin: 0 0 16px; font-size: 18px; }
+  .modal .field { margin-bottom: 12px; }
+  .modal .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+
+  @media(max-width: 760px) {
+    .summary-grid, .safe-meter-grid, .sim-result-card { grid-template-columns: 1fr; }
+    .breakdown-panel, .action-grid { grid-template-columns: 1fr; }
+    .wrap { padding: 24px 16px 100px; }
+  }
+
+  /* --- Super Snaps final paper/sidebar layout --- */
+  body {
+    background:
+      radial-gradient(circle, rgba(39,91,57,.075) 0.8px, transparent 0.9px) 0 0 / 9px 9px,
+      #fff;
+    min-height: 100vh;
+  }
+  .app-nav { display:none !important; }
+  .sidebar {
+    position: fixed; inset: 0 auto 0 0; width: 238px; z-index: 200;
+    display:flex; flex-direction:column; padding:24px 16px;
+    background: rgba(255,255,255,.94); backdrop-filter: blur(14px);
+    border-right:1px solid rgba(30,42,34,.12);
+  }
+  .sidebar-brand { display:flex; align-items:center; gap:11px; padding:4px 8px 28px; }
+  .sidebar-name { font-weight:700; font-size:17px; letter-spacing:-.02em; }
+  .sidebar-sub { color:var(--paper-muted); font-size:11px; margin-top:2px; }
+  .sidebar-nav { display:flex; flex-direction:column; gap:5px; }
+  .sidebar-nav .dashboard-tab {
+    width:100%; display:flex; align-items:center; gap:11px; text-align:left;
+    padding:11px 12px; border:1px solid transparent; border-radius:10px;
+    background:transparent; color:var(--paper-muted); font-size:13px; font-weight:600;
+  }
+  .sidebar-nav .dashboard-tab:hover { color:var(--paper-ink); background:var(--paper-green-soft); }
+  .sidebar-nav .dashboard-tab.active {
+    color:var(--paper-green-dark); background:#e7f1e5; border-color:rgba(57,115,76,.16); box-shadow:none;
+  }
+  .sidebar-nav .dashboard-tab:first-letter { font-size:16px; }
+  .sidebar-foot { margin-top:auto; padding:16px 8px 4px; font:10px var(--font-mono); letter-spacing:.12em; color:var(--paper-green); }
+  .sidebar-foot span { color:var(--paper-muted); letter-spacing:0; }
+  .wrap { max-width:none; margin:0 0 0 238px; padding:38px 46px 120px; }
+  header.top { max-width:1100px; margin:0 auto 28px; background:rgba(255,255,255,.82); }
+  #ledgerWorkspaces { max-width:1100px; margin:0 auto; }
+  .dashboard-tabs { display:none !important; }
+  .card, .insights-card, .safe-meter-card { background:rgba(255,255,255,.92) !important; }
+  /* Insights content is scoped strictly to the Insights workspace. */
+  #ledgerWorkspaces > .true-panel:not(.active) .insights-card { display:none !important; }
+  #ledgerWorkspaces > .true-panel:not([data-workspace="insights"]) #insightsCard { display:none !important; }
+  @media (max-width: 800px) {
+    .sidebar { position:sticky; top:0; width:100%; height:auto; min-height:0; padding:10px 12px; border-right:0; border-bottom:1px solid rgba(30,42,34,.12); }
+    .sidebar-brand { padding:2px 4px 10px; }
+    .sidebar-foot { display:none; }
+    .sidebar-nav { flex-direction:row; overflow-x:auto; padding-bottom:2px; }
+    .sidebar-nav .dashboard-tab { flex:0 0 auto; width:auto; white-space:nowrap; padding:9px 11px; }
+    .wrap { margin-left:0; padding:24px 16px 100px; }
+  }
+
+  /* --- Flight Tracking --- */
+  .flight-grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  .flight-form-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+  .flight-card { border:1px solid rgba(57,115,76,.22); border-radius:14px; padding:16px; margin-top:12px; background:rgba(255,255,255,.78); }
+  .flight-route { font-family:var(--font-mono); font-size:13px; color:var(--paper-green-dark); letter-spacing:.04em; }
+  .flight-price { font-family:var(--font-display); font-size:24px; font-weight:700; }
+  .flight-meta { display:flex; flex-wrap:wrap; gap:8px; color:var(--paper-muted); font-size:11px; margin-top:6px; }
+  .flight-pill { padding:4px 8px; border-radius:999px; background:#e7f1e5; color:var(--paper-green-dark); font-family:var(--font-mono); }
+  .flight-history-wrap { height:230px; margin-top:14px; }
+  .flight-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+  .flight-empty { padding:18px; border:1px dashed var(--paper-line); border-radius:12px; color:var(--paper-muted); }
+  .flight-status { margin-top:10px; font-size:12px; }
+  .fare-list { border:1px solid rgba(57,115,76,.22); border-radius:14px; overflow:hidden; background:rgba(255,255,255,.78); }
+  .fare-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-bottom:1px solid rgba(57,115,76,.12); }
+  .fare-row:last-child { border-bottom:none; }
+  .fare-airline { font-weight:600; }
+  .fare-meta { color:var(--paper-muted); font-size:11px; margin-top:2px; }
+  .fare-price { font-family:var(--font-display); font-size:16px; font-weight:700; white-space:nowrap; }
+  @media(max-width:800px){ .flight-grid,.flight-form-grid{grid-template-columns:1fr;} }
+
+</style>
+</head>
+<body>
+
+<aside class="sidebar" aria-label="Super Snaps navigation">
+  <div class="sidebar-brand">
+    <span class="brand-mark">↗</span>
+    <div><div class="sidebar-name">Super Snaps</div><div class="sidebar-sub">Personal Finance</div></div>
+  </div>
+  <nav class="sidebar-nav" aria-label="Dashboard Workspaces">
+    <button class="dashboard-tab active" data-tab="overview">⌂ <span>Overview</span></button>
+    <button class="dashboard-tab" data-tab="transactions">↗ <span>Transactions</span></button>
+    <button class="dashboard-tab" data-tab="spending">◌ <span>Spending</span></button>
+    <button class="dashboard-tab" data-tab="wishlist">♡ <span>Wishlist &amp; Deals</span></button>
+    <button class="dashboard-tab" data-tab="flights">✈ <span>Flight Tracking</span></button>
+    <button class="dashboard-tab" data-tab="insights">✦ <span>Insights &amp; Agents</span></button>
+  </nav>
+  <div class="sidebar-foot">SUPER SNAPS<br><span>Spend thoughtfully.</span></div>
+</aside>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Personal Finance</div>
+      <h1>Super Snaps</h1>
+    </div>
+    <div class="today" id="todayLabel"></div>
+  </header>
+
+
+  <div id="ledgerWorkspaces">
+
+    <!-- 1. OVERVIEW TAB -->
+    <section class="true-panel active" data-workspace="overview">
+      <div class="workspace-title">
+        <div>
+          <div class="workspace-kicker">Summary & Limits</div>
+          <h2>Overview</h2>
+          <p>Your standing income, targets, and safe spending allowance.</p>
+        </div>
+      </div>
+
+      <!-- Safe-to-Spend Daily Meter -->
+      <div class="safe-meter-card" id="safeMeterCard">
+        <div class="safe-meter-grid">
+          <div>
+            <div style="font: 11px var(--font-mono); text-transform: uppercase; color: var(--paper-green-dark); letter-spacing: .08em;">Safe-to-Spend Daily Meter</div>
+            <div class="safe-value-display" id="safeDailyValue">—</div>
+            <div style="font-size: 13px; color: var(--paper-muted);" id="safeMeterSummary">Calculating safe daily allowance...</div>
+            <div class="safe-progress-track">
+              <div class="safe-progress-fill" id="safeProgressFill" style="width: 0%;"></div>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:11px; font-family:var(--font-mono); color:var(--paper-muted);">
+              <span id="safeSpentLabel">Spent: —</span>
+              <span id="safePoolLabel">Pool: —</span>
+            </div>
+          </div>
+          <div class="safe-stats-mini">
+            <div>
+              <div style="color:var(--paper-muted); font-size:10px; text-transform:uppercase;">Days Remaining</div>
+              <strong style="font-size:16px;" id="safeDaysLeft">—</strong>
+            </div>
+            <div>
+              <div style="color:var(--paper-muted); font-size:10px; text-transform:uppercase;">Discretionary Left</div>
+              <strong style="font-size:16px; color:var(--paper-green);" id="safePoolRemaining">—</strong>
+            </div>
+            <div>
+              <div style="color:var(--paper-muted); font-size:10px; text-transform:uppercase;">Today's Left</div>
+              <strong style="font-size:16px;" id="safeTodayLeft">—</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Salary & Savings Setup -->
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0;"><span class="num">01</span>Income & Savings Target</h3>
+          <button class="btn-ghost" id="btnToggleIncomeVisibility" style="font-size:12px; padding:6px 12px;" title="Show/hide these fields">👁️ Hide</button>
+        </div>
+        <div id="incomeSavingsFields" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+          <div>
+            <label class="field-label" for="salaryInput">Monthly Take-Home Pay</label>
+            <div class="row">
+              <div><input type="number" id="salaryInput" placeholder="e.g. 60000"></div>
+              <button class="btn-primary" id="saveSalaryBtn">Save</button>
+            </div>
+          </div>
+          <div>
+            <label class="field-label" for="savingsPercentInput">Savings Goal (% of salary)</label>
+            <div class="row">
+              <div><input type="number" id="savingsPercentInput" placeholder="e.g. 20 (leave blank for 50/30/20 default)"></div>
+              <button class="btn-ghost" id="saveSavingsPercentBtn">Save</button>
+            </div>
+          </div>
+        </div>
+        <div id="incomeSavingsHiddenNotice" class="hint" style="display:none; margin-top:16px;">Hidden — click the eye icon above to reveal.</div>
+      </div>
+
+      <!-- High-level Summary Metrics -->
+      <div class="summary-grid">
+        <div class="stat">
+          <div class="label">Luxury Purchases</div>
+          <div class="value" id="statLuxuryPurchases">—</div>
+        </div>
+        <div class="stat">
+          <div class="label">Fixed Expenses</div>
+          <div class="value" id="statFixedTotal">—</div>
+          <div class="sub" id="statFixedPct">—</div>
+          <div class="sub" id="statFixedBreakdown" style="margin-top:6px; line-height:1.5;">—</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. TRANSACTIONS TAB -->
+    <section class="true-panel" data-workspace="transactions">
+      <div class="workspace-title">
+        <div>
+          <div class="workspace-kicker">Money Movement</div>
+          <h2>Transactions & Purchases</h2>
+          <p>Log purchases manually, or message your Telegram bot to add day-wise spends.</p>
+        </div>
+        <button class="btn-primary" id="btnManualPurchase">+ Add Purchase</button>
+      </div>
+
+      <!-- Day-wise spending (Telegram sync) -->
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom: 12px; gap:10px; flex-wrap:wrap;">
+          <h3 style="margin:0;"><span class="num">01</span>Day-wise Spending</h3>
+          <div style="display:flex; align-items:baseline; gap:10px;">
+            <button class="btn-ghost" id="btnSyncTelegram" style="font-size:12px; padding:6px 12px;">🔄 Sync Telegram</button>
+            <span class="hint" id="dayTotalsCaption" style="font-family: var(--font-mono); color: var(--paper-green);"></span>
+          </div>
+        </div>
+        <div class="hint" id="telegramSyncStatus" style="margin-bottom:8px;"></div>
+        <div id="dayTotalsList">
+          <div class="tl-empty">No day-wise expenses recorded yet this month.</div>
+        </div>
+      </div>
+
+      <!-- Timeline of discretionary purchases -->
+      <div class="card">
+        <h3><span class="num">02</span>Purchase Timeline</h3>
+        <div class="timeline" id="timeline">
+          <div class="tl-empty">No purchases logged yet[cite: 4].</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. SPENDING TAB -->
+    <section class="true-panel" data-workspace="spending">
+      <div class="workspace-title">
+        <div>
+          <div class="workspace-kicker">Recurring Costs</div>
+          <h2>Monthly Fixed Spending</h2>
+          <p>Parse natural-language bills and view category distributions.</p>
+        </div>
+      </div>
+
+      <!-- Natural language fixed expenses input -->
+      <div class="card">
+        <h3><span class="num">01</span>Log Monthly Recurring Expenses</h3>
+        <label class="field-label" for="expenseInput">Plain Language Input</label>
+        <textarea id="expenseInput" placeholder="I spent 12k on rent, 5k on food and 3000 on fuel[cite: 1, 4]"></textarea>
+        <div class="row" style="margin-top: 10px;">
+          <button class="btn-ghost" id="previewBtn">Preview</button>
+          <button class="btn-primary" id="saveExpenseBtn">Save to this month</button>
+        </div>
+        <div class="parsed-preview" id="parsedPreview" style="margin-top:12px;"></div>
+        <div class="hint" id="parseSourceHint"></div>
+      </div>
+
+      <!-- Category Breakdown Chart -->
+      <div class="breakdown-panel">
+        <div class="card">
+          <h3>Category Breakdown</h3>
+          <canvas id="expenseChart" height="220"></canvas>
+        </div>
+        <div class="card">
+          <h3>By Category</h3>
+          <ul class="legend-list" id="legendList">
+            <li class="tl-empty">No monthly expenses recorded yet.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. WISHLIST & DEALS TAB -->
+    <section class="true-panel" data-workspace="wishlist">
+      <div class="workspace-title">
+        <div>
+          <div class="workspace-kicker">Future Purchases & Simulation</div>
+          <h2>Wishlist & Deal Evaluator</h2>
+          <p>Test-drive buys and evaluate market prices before purchasing.</p>
+        </div>
+      </div>
+
+      <!-- "What-If" Purchase Simulator -->
+      <div class="card">
+        <h3><span class="num">01</span>"What-If" Purchase Simulator</h3>
+        <div class="sim-box">
+          <label class="field-label" for="simPriceInput">Simulate an instant purchase amount (₹)</label>
+          <div class="row">
+            <div><input type="number" id="simPriceInput" placeholder="e.g. 15000"></div>
+            <button class="btn-primary" id="btnRunSim">Run Simulation</button>
+          </div>
+          <div class="sim-result-card" id="simResults" style="display:none;">
+            <div class="sim-metric">
+              <span>Remaining This Month</span>
+              <strong id="simRemSavings">—</strong>
+            </div>
+            <div class="sim-metric">
+              <span>New Savings Rate</span>
+              <strong id="simNewSavingsRate">—</strong>
+            </div>
+            <div class="sim-metric">
+              <span>Wishlist Runway Delay</span>
+              <strong id="simWishlistDelay">—</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Wishlist with live runway and Deal Evaluator hooks -->
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom: 12px;">
+          <h3 style="margin:0;"><span class="num">02</span>Your Wishlist Runway</h3>
+          <span class="hint" id="wlSavingsCaption" style="font-family: var(--font-mono); color: var(--paper-green);"></span>
+        </div>
+        <div class="runway-import">
+          <label class="field-label" for="wlUrl">Add from Amazon or Flipkart</label>
+          <div class="url-row">
+            <input type="url" id="wlUrl" placeholder="Paste the Amazon or Flipkart product link">
+            <button class="btn-primary" id="wlImportBtn">Add Product Link</button>
+          </div>
+          <small>Super Snaps reads the product name and current price, then records each price check for the history graph.</small>
+        </div>
+        <div class="row" style="margin-bottom: 16px;">
+          <input type="text" id="wlName" placeholder="Product name (e.g. Headphones)">
+          <input type="number" id="wlPrice" placeholder="Price" style="max-width:140px;">
+          <button class="btn-primary" id="wlAddBtn">Add Manually</button>
+        </div>
+        <div id="wishlistList"><div class="tl-empty">Your wishlist is empty.</div></div>
+      </div>
+
+      <!-- Product Recommendations -->
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+          <h3 style="margin:0;"><span class="num">03</span>What You Might Want Next</h3>
+          <span class="source-badge" id="recsSourceBadge"></span>
+        </div>
+        <div id="recsList"><div class="tl-empty">Loading recommendations...</div></div>
+      </div>
+
+      <!-- User Profile for Recommendations -->
+      <div class="card">
+        <h3><span class="num">04</span>Profile Context</h3>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div>
+            <label class="field-label" for="professionInput">Job / Field</label>
+            <input type="text" id="professionInput" placeholder="e.g. Software Engineer">
+          </div>
+          <div>
+            <label class="field-label" for="interestsInput">Interests</label>
+            <input type="text" id="interestsInput" placeholder="e.g. Photography, Cycling">
+          </div>
+        </div>
+        <button class="btn-primary" id="saveProfileBtn" style="margin-top:12px;">Save Profile</button>
+      </div>
+    </section>
+
+
+    <!-- 5. FLIGHT TRACKING TAB -->
+    <section class="true-panel" data-workspace="flights">
+      <div class="workspace-title">
+        <div>
+          <div class="workspace-kicker">Fare Watch & Alerts</div>
+          <h2>Flight Tracking</h2>
+          <p>Track a route, watch fares over time, and get a Gmail alert when the price drops.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3><span class="num">01</span>Track a Flight</h3>
+        <p class="hint" style="margin-bottom:14px;">Use 3-letter airport codes such as DEL → BOM. Super Snaps checks the best available fare returned by the configured flight provider.</p>
+        <div class="flight-form-grid">
+          <div><label class="field-label" for="flightOrigin">From</label><input id="flightOrigin" maxlength="3" placeholder="DEL"></div>
+          <div><label class="field-label" for="flightDestination">To</label><input id="flightDestination" maxlength="3" placeholder="BOM"></div>
+          <div><label class="field-label" for="flightDeparture">Departure</label><input type="date" id="flightDeparture"></div>
+          <div><label class="field-label" for="flightReturn">Return <span class="hint">(optional)</span></label><input type="date" id="flightReturn"></div>
+          <div><label class="field-label" for="flightAdults">Travellers</label><input type="number" id="flightAdults" min="1" max="9" value="1"></div>
+          <div><label class="field-label" for="flightClass">Cabin</label><select id="flightClass"><option value="ECONOMY">Economy</option><option value="PREMIUM_ECONOMY">Premium Economy</option><option value="BUSINESS">Business</option><option value="FIRST">First</option></select></div>
+          <div><label class="field-label" for="flightTarget">Alert target ₹ <span class="hint">(optional)</span></label><input type="number" id="flightTarget" placeholder="e.g. 6500"></div>
+          <div><label class="field-label" for="flightEmail">Gmail for alerts <span class="hint">(optional)</span></label><input type="email" id="flightEmail" placeholder="you@gmail.com"></div>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">
+          <button class="btn-ghost" id="btnSearchFlights">Search Fares</button>
+          <button class="btn-primary" id="btnAddFlight">Start Tracking</button>
+        </div>
+        <div id="flightSetupHint" class="hint" style="margin-top:10px;"></div>
+        <div id="flightSearchResults" style="margin-top:14px;"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;">
+          <h3><span class="num">02</span>Your Tracked Flights</h3>
+          <span class="hint">Daily fare check · Weekly Gmail summary</span>
+        </div>
+        <div id="flightList"><div class="flight-empty">No flights are being tracked yet.</div></div>
+      </div>
+    </section>
+
+    <!-- 6. INSIGHTS & AGENTS TAB -->
+    <section class="true-panel" data-workspace="insights">
+      <div class="workspace-title">
+        <div>
+          <div class="workspace-kicker">Autonomous Intelligence</div>
+          <h2>Insights & Agents</h2>
+          <p>AI spending reviews and automated budget optimization.</p>
+        </div>
+        <span class="source-badge" id="insightsSourceBadge"></span>
+      </div>
+      <!-- Agent 1: Autonomous Spend Cutter Card -->
+      <div class="card" style="border:1px solid rgba(57,115,76,.35);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <h3 style="margin:0;"><span class="num">🤖</span>Autonomous Spend Cutter & Rebalancer</h3>
+          <span class="source-badge groq" id="cutterBadge">Agent Ready</span>
+        </div>
+        <p style="font-size:13px; color:var(--paper-muted); margin:0 0 14px;">
+          The agent evaluates your largest spending leaks and generates a one-click actionable budget rebalance plan.
+        </p>
+        <button class="btn-primary" id="btnRunSpendCutter">Generate Spend Cut Plan</button>
+        
+        <div id="spendCutterResults" style="display:none; margin-top:16px; padding-top:14px; border-top:1px dashed var(--paper-line);">
+          <div style="font-size:15px; font-weight:600; color:var(--paper-green);" id="cutterBoostText">—</div>
+          <ul class="suggestion-list" id="cutterActionList" style="margin:10px 0;"></ul>
+          <div id="cutterTableWrap"></div>
+          <button class="btn-primary" id="btnApplyCutterPlan" style="margin-top:12px;">Apply Rebalanced Targets</button>
+        </div>
+      </div>
+
+      <!-- Spending Insights Card -->
+      <div class="insights-card" id="insightsCard">
+        <div class="tl-empty">Loading insights...</div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- Floating Action Button -->
+<div class="fab" id="fabAdd" title="Create / Upload">+</div>
+
+<!-- Floating Chat Assistant -->
+<div class="chat-fab" id="chatFab" title="Ask Super Snaps Assistant">💬</div>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-panel-head">
+    <h3>💬 Super Snaps Assistant</h3>
+    <button class="btn-ghost" id="chatPanelClose" style="padding:4px 10px;">✕</button>
+  </div>
+  <div style="padding: 14px 16px 16px; display:flex; flex-direction:column; flex:1; min-height:0;">
+    <div id="chatHistory" style="flex:1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding: 10px; background: rgba(255,255,255,.4); border-radius: 10px; border: 1px solid var(--paper-line);">
+      <div style="align-self: flex-start; background: var(--paper-card); padding: 8px 12px; border-radius: 10px; font-size: 13px;">
+        👋 Hi! Ask me questions like <em>"What was my biggest purchase?"</em> or <em>"How much did I spend on food this month?"</em>
+      </div>
+    </div>
+    <div class="row">
+      <div><input type="text" id="chatInput" placeholder="e.g. Total spending on food in August 2026?"></div>
+      <button class="btn-primary" id="btnSendChat">Ask</button>
+    </div>
+  </div>
+</div>
+
+<!-- Action Sheet Modal for FAB -->
+<div class="action-sheet-overlay" id="actionSheetV3">
+  <div class="action-sheet">
+    <div class="action-sheet-head">
+      <h3>Quick Actions</h3>
+      <button class="btn-ghost" id="actionCloseV3" style="padding:4px 10px;">✕</button>
+    </div>
+    <div class="action-grid">
+      <button class="action-item" id="actionExpenseV3">
+        <div style="font-size:20px; color:var(--paper-green);">₹</div>
+        <strong>Add Purchase</strong>
+        <span>Log a discretionary buy.</span>
+      </button>
+      <button class="action-item" id="actionWishlistV3">
+        <div style="font-size:20px; color:var(--paper-green);">☆</div>
+        <strong>Add to Wishlist</strong>
+        <span>Track future purchases.</span>
+      </button>
+      <button class="action-item" id="actionFixedV3">
+        <div style="font-size:20px; color:var(--paper-green);">✎</div>
+        <strong>Log Fixed Expenses</strong>
+        <span>Enter monthly bills.</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Purchase Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3>Add a Purchase</h3>
+    <div class="field">
+      <label class="field-label" for="prodName">Product</label>
+      <input type="text" id="prodName" placeholder="e.g. Keyboard">
+    </div>
+    <div class="field">
+      <label class="field-label" for="prodPrice">Price</label>
+      <input type="number" id="prodPrice" placeholder="e.g. 4500">
+    </div>
+    <div class="field">
+      <label class="field-label" for="prodDate">Date</label>
+      <input type="date" id="prodDate">
+    </div>
+    <div class="actions">
+      <button class="btn-ghost" id="cancelAddBtn">Cancel</button>
+      <button class="btn-primary" id="confirmAddBtn">Add</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CHART_COLORS = ['#39734c','#c9a24b','#b5482f','#6c8ebf','#8892a6','#a06cd5','#4fb0a5','#d68f4f'];
+const today = new Date();
+document.getElementById('todayLabel').textContent = today.toDateString();
+document.getElementById('prodDate').value = today.toISOString().slice(0,10);
+
+const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN', {maximumFractionDigits: 0});
+function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function escapeAttr(s){ return String(s).replace(/"/g, '&quot;'); }
+
+let chart;
+let currentMonthlySavings = 0;
+let currentSalary = 0;
+let currentFixed = 0;
+let currentPurchases = 0;
+let activeCutterPlan = null;
+
+/* ---------- Tab Controller ---------- */
+const tabs = document.querySelectorAll('.dashboard-tab');
+const panels = document.querySelectorAll('#ledgerWorkspaces > .true-panel');
+
+function activateTab(name){
+  tabs.forEach(t => {
+    const on = t.dataset.tab === name;
+    t.classList.toggle('active', on);
+  });
+  panels.forEach(p => {
+    const on = p.dataset.workspace === name;
+    p.classList.toggle('active', on);
+    p.setAttribute('aria-hidden', on ? 'false' : 'true');
+  });
+  try { localStorage.setItem('ledgerActiveTab', name); } catch(e){}
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+tabs.forEach(t => t.addEventListener('click', () => activateTab(t.dataset.tab)));
+const savedTab = localStorage.getItem('ledgerActiveTab');
+if (savedTab && ['overview','transactions','spending','wishlist','flights','insights'].includes(savedTab)) {
+  activateTab(savedTab);
+}
+
+/* ---------- Global Refresh ---------- */
+async function refreshAll(){
+  await Promise.all([
+    loadSalary(), loadTimeline(), loadSummary(), loadStatus(),
+    loadProfile(), loadRecommendations(), loadWishlist(),
+    loadSavingsPercent(), loadInsights(), loadDayExpenses(),
+    loadSafeToSpend(), loadFlights()
+  ]);
+}
+
+/* ---------- Safe-to-Spend Meter ---------- */
+async function loadSafeToSpend(){
+  const dailyEl = document.getElementById('safeDailyValue');
+  const summaryEl = document.getElementById('safeMeterSummary');
+  const fillEl = document.getElementById('safeProgressFill');
+  const daysEl = document.getElementById('safeDaysLeft');
+  const remPoolEl = document.getElementById('safePoolRemaining');
+  const todayLeftEl = document.getElementById('safeTodayLeft');
+  const spentLabel = document.getElementById('safeSpentLabel');
+  const poolLabel = document.getElementById('safePoolLabel');
+
+  try {
+    const r = await fetch('/api/budget/safe-to-spend');
+    const d = await r.json();
+
+    if (!d.configured){
+      dailyEl.textContent = '—';
+      summaryEl.textContent = d.message;
+      return;
+    }
+
+    // Today's Left (per-day allowance minus what's already gone out today)
+    // is the headline number — it's more actionable right now than a flat
+    // daily average, since it accounts for today's actual spending.
+    dailyEl.textContent = fmt(d.today_left);
+    summaryEl.textContent = `Today's amount left, with ${fmt(d.remaining_pool)} safe discretionary pool across ${d.days_remaining} remaining day(s).`;
+    daysEl.textContent = `${d.days_remaining} days`;
+    remPoolEl.textContent = fmt(d.remaining_pool);
+    todayLeftEl.textContent = fmt(d.today_left);
+    todayLeftEl.style.color = d.today_left < 0 ? 'var(--rust)' : 'var(--paper-green)';
+    spentLabel.textContent = `Spent: ${fmt(d.discretionary_spent)}`;
+    poolLabel.textContent = `Pool: ${fmt(d.total_discretionary_pool)}`;
+
+    const pct = d.total_discretionary_pool > 0 
+      ? Math.min(100, Math.round((d.discretionary_spent / d.total_discretionary_pool) * 100))
+      : 100;
+    fillEl.style.width = `${pct}%`;
+    fillEl.style.background = pct > 90 ? 'var(--rust)' : 'var(--paper-green)';
+  } catch(e){}
+}
+
+/* ---------- "What-If" Simulator ---------- */
+document.getElementById('btnRunSim').onclick = () => {
+  const price = parseFloat(document.getElementById('simPriceInput').value);
+  if (!price || price <= 0){ alert('Please enter a valid amount to simulate.'); return; }
+
+  const resultsCard = document.getElementById('simResults');
+  resultsCard.style.display = 'grid';
+
+  const newSavings = Math.max(0, currentMonthlySavings - price);
+  const newSavingsRate = currentSalary > 0 ? ((newSavings / currentSalary) * 100).toFixed(1) : 0;
+  
+  document.getElementById('simRemSavings').textContent = fmt(newSavings);
+  document.getElementById('simNewSavingsRate').textContent = `${newSavingsRate}%`;
+
+  if (currentMonthlySavings <= 0) {
+    document.getElementById('simWishlistDelay').textContent = 'No active savings';
+  } else {
+    const delayFactor = (price / currentMonthlySavings).toFixed(1);
+    document.getElementById('simWishlistDelay').textContent = `+${delayFactor} mo delay`;
+  }
+};
+
+/* ---------- Agent 1: Spend Cutter Plan & Apply ---------- */
+document.getElementById('btnRunSpendCutter').onclick = async () => {
+  const btn = document.getElementById('btnRunSpendCutter');
+  btn.disabled = true;
+  btn.textContent = 'Agent Analyzing Spending...';
+
+  try {
+    const r = await fetch('/api/agents/spend-cutter/plan');
+    const d = await r.json();
+    activeCutterPlan = d;
+
+    document.getElementById('cutterBadge').textContent = d.source === 'groq' ? 'Groq Agent' : 'Rule Agent';
+    document.getElementById('cutterBoostText').textContent = `Potential Recovery: +${fmt(d.monthly_savings_boost)}/month (Projected Savings Rate: ${d.new_projected_savings_rate}%)`;
+
+    const list = document.getElementById('cutterActionList');
+    list.innerHTML = (d.action_plan || []).map(a => `<li>${escapeHtml(a)}</li>`).join('');
+
+    const tableWrap = document.getElementById('cutterTableWrap');
+    if (d.rebalanced_fixed_expenses && d.rebalanced_fixed_expenses.length) {
+      let html = `<table class="cutter-table"><thead><tr><th>Category</th><th>Current</th><th>Target</th><th>Cut</th></tr></thead><tbody>`;
+      d.rebalanced_fixed_expenses.forEach(row => {
+        html += `<tr>
+          <td><strong>${escapeHtml(row.category)}</strong></td>
+          <td>${fmt(row.original_amount)}</td>
+          <td style="color:var(--paper-green); font-weight:600;">${fmt(row.proposed_amount)}</td>
+          <td style="color:var(--rust);">- ${fmt(row.cut_amount)}</td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+      tableWrap.innerHTML = html;
+    } else {
+      tableWrap.innerHTML = '<div class="hint">No immediate fixed category cuts detected. Keep discretionary spends low!</div>';
+    }
+
+    document.getElementById('spendCutterResults').style.display = 'block';
+  } catch(e) {
+    alert('Error running Spend Cutter agent.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Re-run Spend Cut Plan';
+  }
+};
+
+document.getElementById('btnApplyCutterPlan').onclick = async () => {
+  if (!activeCutterPlan || !activeCutterPlan.rebalanced_fixed_expenses) return;
+  const r = await fetch('/api/agents/spend-cutter/apply', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rebalanced_fixed_expenses: activeCutterPlan.rebalanced_fixed_expenses })
+  });
+  if (r.ok) {
+    alert('✅ Rebalanced category targets applied to monthly expenses!');
+    refreshAll();
+  } else {
+    alert('Failed to apply rebalanced targets.');
+  }
+};
+
+/* ---------- Groq Status ---------- */
+async function loadStatus(){
+  try {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    const hint = document.getElementById('parseSourceHint');
+    if (d.groq_configured){
+      hint.innerHTML = 'Parsed by <b style="color:var(--paper-green)">Groq</b> — handles natural phrasing effortlessly[cite: 1, 4].';
+    } else {
+      hint.innerHTML = 'Groq key not set — using local rule parser. Supports phrases like <code>12k on rent</code>[cite: 1, 4].';
+    }
+  } catch(e){}
+}
+
+/* ---------- Salary & Savings Goal ---------- */
+async function loadSalary(){
+  const r = await fetch('/api/settings/salary');
+  const d = await r.json();
+  currentSalary = d.monthly_salary || 0;
+  if (d.monthly_salary != null) document.getElementById('salaryInput').value = d.monthly_salary;
+}
+document.getElementById('saveSalaryBtn').onclick = async () => {
+  const val = document.getElementById('salaryInput').value;
+  if (!val) return;
+  await fetch('/api/settings/salary', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({monthly_salary: parseFloat(val)})
+  });
+  refreshAll();
+};
+
+async function loadSavingsPercent(){
+  const r = await fetch('/api/settings/savings-percent');
+  const d = await r.json();
+  document.getElementById('savingsPercentInput').value = d.savings_percent != null ? d.savings_percent : '';
+}
+document.getElementById('saveSavingsPercentBtn').onclick = async () => {
+  const val = document.getElementById('savingsPercentInput').value;
+  await fetch('/api/settings/savings-percent', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({savings_percent: val === '' ? null : parseFloat(val)})
+  });
+  loadInsights();
+  loadSafeToSpend();
+};
+
+/* ---------- Income & Savings visibility toggle ---------- */
+function applyIncomeVisibility(hidden){
+  document.getElementById('incomeSavingsFields').style.display = hidden ? 'none' : 'grid';
+  document.getElementById('incomeSavingsHiddenNotice').style.display = hidden ? 'block' : 'none';
+  document.getElementById('btnToggleIncomeVisibility').textContent = hidden ? '👁️‍🗨️ Show' : '👁️ Hide';
+}
+(function initIncomeVisibilityToggle(){
+  const hidden = localStorage.getItem('ledger_hide_income_fields') === '1';
+  applyIncomeVisibility(hidden);
+  document.getElementById('btnToggleIncomeVisibility').onclick = () => {
+    const nowHidden = localStorage.getItem('ledger_hide_income_fields') !== '1';
+    localStorage.setItem('ledger_hide_income_fields', nowHidden ? '1' : '0');
+    applyIncomeVisibility(nowHidden);
+  };
+})();
+
+/* ---------- Summary & Chart ---------- */
+async function loadSummary(){
+  const r = await fetch('/api/summary');
+  const d = await r.json();
+
+  currentPurchases = d.month_purchases || 0;
+  currentFixed = d.fixed_total || 0;
+
+  document.getElementById('statLuxuryPurchases').textContent = fmt(d.total_purchases_all_time);
+  document.getElementById('statFixedTotal').textContent = fmt(d.fixed_total);
+
+  document.getElementById('statFixedPct').textContent =
+    d.pct_fixed_of_salary_month != null ? `${d.pct_fixed_of_salary_month}% of salary` : 'Add salary to see %';
+
+  const breakdownEl = document.getElementById('statFixedBreakdown');
+  const fixedRows = d.fixed_expenses || [];
+  breakdownEl.textContent = fixedRows.length
+    ? fixedRows.map(row => `${row.category} ${fmt(row.amount)}`).join(' · ')
+    : 'No fixed expenses logged yet.';
+
+  renderChartAndLegend(d.fixed_expenses);
+}
+
+function renderChartAndLegend(rows){
+  const legend = document.getElementById('legendList');
+  legend.innerHTML = '';
+  if (!rows || !rows.length){
+    legend.innerHTML = '<li class="tl-empty">No monthly expenses recorded yet.</li>';
+  } else {
+    rows.forEach((row, i) => {
+      const li = document.createElement('li');
+      const color = CHART_COLORS[i % CHART_COLORS.length];
+      li.innerHTML = `<span><span class="dot" style="background:${color}"></span>${escapeHtml(row.category)}</span><span class="amt">${fmt(row.amount)}</span>`;
+      legend.appendChild(li);
+    });
+  }
+
+  const ctx = document.getElementById('expenseChart');
+  if (chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: (rows||[]).map(r => r.category),
+      datasets: [{ data: (rows||[]).map(r => r.amount), backgroundColor: CHART_COLORS, borderWidth: 0 }]
+    },
+    options: { plugins: { legend: { display: false } }, cutout: '68%' }
+  });
+}
+
+/* ---------- Fixed Expense NLP ---------- */
+document.getElementById('previewBtn').onclick = async () => {
+  const text = document.getElementById('expenseInput').value.trim();
+  if (!text) return;
+  const r = await fetch('/api/monthly-expenses/parse', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({text})
+  });
+  const d = await r.json();
+  renderPreview(d.parsed, d.source);
+};
+
+function renderPreview(items, source){
+  const box = document.getElementById('parsedPreview');
+  box.innerHTML = '';
+  if (!items || !items.length){
+    box.innerHTML = '<span class="hint">No items recognized. Phrasing format: "12k on rent, 3k on fuel"</span>';
+    return;
+  }
+  items.forEach(it => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.innerHTML = `${escapeHtml(it.category)}: <b>${fmt(it.amount)}</b>`;
+    box.appendChild(chip);
+  });
+}
+
+document.getElementById('saveExpenseBtn').onclick = async () => {
+  const text = document.getElementById('expenseInput').value.trim();
+  if (!text) return;
+  const now = new Date();
+  const r = await fetch('/api/monthly-expenses', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({text, year: now.getFullYear(), month: now.getMonth()+1})
+  });
+  const d = await r.json();
+  if (!r.ok) { alert(d.error || 'Could not parse that.'); return; }
+  renderPreview(d.items, d.source);
+  refreshAll();
+};
+
+/* ---------- Timeline & Purchases ---------- */
+async function loadTimeline(){
+  const r = await fetch('/api/purchases');
+  const rows = await r.json();
+  const tl = document.getElementById('timeline');
+  tl.innerHTML = '';
+  if (!rows.length){
+    tl.innerHTML = '<div class="tl-empty">No purchases yet — click "+ Add Purchase" to add one.</div>';
+    return;
+  }
+  rows.forEach(p => {
+    const item = document.createElement('div');
+    item.className = 'tl-item';
+    item.innerHTML = `
+      <div class="tl-date">${new Date(p.purchased_on).toDateString()}</div>
+      <div class="tl-row">
+        <span class="tl-name">${escapeHtml(p.name)}</span>
+        <span>
+          <span class="tl-price">${fmt(p.price)}</span>
+          <button class="tl-del" data-id="${p.id}" title="Remove" style="margin-left:8px;">✕</button>
+        </span>
+      </div>`;
+    tl.appendChild(item);
+  });
+  tl.querySelectorAll('.tl-del').forEach(btn => {
+    btn.onclick = async () => {
+      await fetch(`/api/purchases/${btn.dataset.id}`, { method:'DELETE' });
+      refreshAll();
+    };
+  });
+}
+
+async function loadDayExpenses(){
+  const now = new Date();
+  const r = await fetch(`/api/day-expenses?year=${now.getFullYear()}&month=${now.getMonth()+1}`);
+  const d = await r.json();
+  const caption = document.getElementById('dayTotalsCaption');
+  const monthTotal = (d.day_totals || []).reduce((sum, row) => sum + row.total, 0);
+  caption.textContent = d.items && d.items.length ? `${fmt(monthTotal)} logged this month` : '';
+
+  const list = document.getElementById('dayTotalsList');
+  list.innerHTML = '';
+  if (!d.items || !d.items.length){
+    list.innerHTML = '<div class="tl-empty">No day-wise expenses recorded yet this month.</div>';
+    return;
+  }
+  d.items.forEach(it => {
+    const row = document.createElement('div');
+    row.className = 'day-total-row';
+    row.innerHTML = `
+      <span>
+        <strong>${escapeHtml(it.date)}</strong> — ${escapeHtml(it.merchant || 'Unknown')}
+        <span style="color:var(--paper-muted); font-size:11px;">(${escapeHtml(it.category)})</span>
+      </span>
+      <span>
+        <strong style="color:var(--paper-green); font-family:var(--font-mono);">${fmt(it.amount)}</strong>
+        <button class="tl-del" data-id="${it.id}" style="margin-left:8px;">✕</button>
+      </span>`;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('.tl-del').forEach(btn => {
+    btn.onclick = async () => {
+      await fetch(`/api/day-expenses/${btn.dataset.id}`, { method:'DELETE' });
+      loadDayExpenses();
+      loadSafeToSpend();
+    };
+  });
+}
+
+document.getElementById('btnSyncTelegram').onclick = async () => {
+  const btn = document.getElementById('btnSyncTelegram');
+  const status = document.getElementById('telegramSyncStatus');
+  btn.disabled = true; btn.textContent = 'Syncing…'; status.textContent = '';
+  try {
+    const r = await fetch('/api/telegram/sync', { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Could not sync Telegram messages.');
+    if (d.warning) {
+      status.textContent = `Added ${d.synced} expense(s). ${d.warning}`;
+    } else if (d.synced === 0 && d.skipped === 0) {
+      status.textContent = 'No new messages to sync.';
+    } else {
+      status.textContent = `Added ${d.synced} expense(s)${d.skipped ? `, skipped ${d.skipped} (no amount found)` : ''}.`;
+    }
+    await loadDayExpenses();
+    await loadSafeToSpend();
+  } catch(e){
+    status.textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '🔄 Sync Telegram';
+  }
+};
+
+/* ---------- Profile & Recommendations ---------- */
+async function loadProfile(){
+  const r = await fetch('/api/settings/profile');
+  const d = await r.json();
+  document.getElementById('professionInput').value = d.profession || '';
+  document.getElementById('interestsInput').value = d.interests || '';
+}
+document.getElementById('saveProfileBtn').onclick = async () => {
+  await fetch('/api/settings/profile', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      profession: document.getElementById('professionInput').value.trim(),
+      interests: document.getElementById('interestsInput').value.trim()
+    })
+  });
+  loadRecommendations();
+};
+
+async function loadRecommendations(){
+  const list = document.getElementById('recsList');
+  const badge = document.getElementById('recsSourceBadge');
+  try {
+    const r = await fetch('/api/recommendations');
+    const d = await r.json();
+    badge.className = `source-badge ${d.source === 'groq' ? 'groq' : 'rules'}`;
+    badge.textContent = d.source === 'groq' ? 'Groq AI' : 'Rule-based';
+    list.innerHTML = '';
+    if (!d.items || !d.items.length){
+      list.innerHTML = '<div class="tl-empty">Log purchases or fill your profile to generate recommendations[cite: 2, 4].</div>';
+      return;
+    }
+    d.items.forEach(it => {
+      const card = document.createElement('div');
+      card.className = 'rec-card';
+      card.innerHTML = `
+        <div class="rec-top">
+          <span>${escapeHtml(it.name)}</span>
+          <span style="color:var(--paper-green); font-family:var(--font-mono);">${it.est_price ? '~' + fmt(it.est_price) : ''}</span>
+        </div>
+        <span class="rec-cat">${escapeHtml(it.category || 'Tech')}</span>
+        ${it.reason ? `<div class="rec-reason">${escapeHtml(it.reason)}</div>` : ''}`;
+      list.appendChild(card);
+    });
+  } catch(e){}
+}
+
+/* ---------- Wishlist & Agent 2: Deal Evaluator ---------- */
+async function loadWishlist(){
+  const r = await fetch('/api/wishlist');
+  const d = await r.json();
+  currentMonthlySavings = d.monthly_savings || 0;
+
+  const cap = document.getElementById('wlSavingsCaption');
+  cap.textContent = d.monthly_savings != null ? `Saving ~${fmt(d.monthly_savings)}/month right now[cite: 4]` : 'Add salary to see savings runway';
+
+  const list = document.getElementById('wishlistList');
+  list.innerHTML = '';
+  if (!d.items || !d.items.length){
+    list.innerHTML = '<div class="tl-empty">Your wishlist is empty.</div>';
+    return;
+  }
+  d.items.forEach(it => {
+    const div = document.createElement('div');
+    div.className = 'wishlist-item';
+    let sub = it.note ? `<div class="wl-sub" style="color:var(--rust);">${escapeHtml(it.note)}</div>` :
+      `<div class="wl-bar-track"><div class="wl-bar-fill" style="width:${it.months_to_afford === 0 ? 100 : Math.max(8, 100/Math.max(it.months_to_afford,1))}%"></div></div>
+       <div class="wl-sub">~${it.months_to_afford} month(s) of saving (target: ${it.projected_date})</div>`;
+    
+    div.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <div>
+          <strong>${escapeHtml(it.name)}</strong>
+          <div class="wishlist-meta">${it.platform ? `<span class="platform-pill">${escapeHtml(it.platform)}</span>` : ''}${it.product_url ? `<a href="${escapeAttr(it.product_url)}" target="_blank" rel="noopener" class="hint">Open product ↗</a>` : ''}</div>
+        </div>
+        <span>
+          <strong style="color:var(--paper-green); font-family:var(--font-mono);">${fmt(it.price)}</strong>
+          <button class="btn-ghost btn-eval-deal" data-name="${escapeAttr(it.name)}" data-price="${it.price}" style="padding:4px 8px; font-size:11px; margin-left:8px;">🤖 Evaluate Deal</button>
+          <button class="tl-del" data-id="${it.id}" style="margin-left:6px;">✕</button>
+        </span>
+      </div>
+      ${sub}
+      ${it.product_url ? `<div class="price-history-wrap"><div class="hint">Price history</div><canvas class="price-history-canvas" id="priceHistory-${it.id}"></canvas><div class="history-actions"><button class="btn-ghost btn-refresh-price" data-id="${it.id}">↻ Check current price</button></div></div>` : ''}
+      <div id="dealBox-${it.id}" style="display:none;"></div>
+    `;
+    list.appendChild(div);
+    if (it.product_url) loadPriceHistory(it.id);
+  });
+
+  list.querySelectorAll('.btn-refresh-price').forEach(btn => {
+    btn.onclick = async () => {
+      btn.disabled = true; btn.textContent = 'Checking…';
+      try {
+        const r = await fetch(`/api/wishlist/${btn.dataset.id}/refresh`, {method:'POST'});
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Could not refresh price');
+        if (d.needs_price_confirmation) {
+          const raw = prompt(`${d.message}\n\nCurrent price for ${d.name}:`, '');
+          if (raw === null) return;
+          const price = parseFloat(String(raw).replace(/[,₹ ]/g, ''));
+          if (!price || price <= 0) { alert('Please enter a valid positive price.'); return; }
+          const mr = await fetch(`/api/wishlist/${btn.dataset.id}/manual-price`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({price})});
+          const md = await mr.json();
+          if (!mr.ok) throw new Error(md.error || 'Could not save price');
+        }
+        await loadWishlist();
+      } catch(e) { alert(e.message); btn.disabled = false; btn.textContent = '↻ Check current price'; }
+    };
+  });
+
+  list.querySelectorAll('.btn-eval-deal').forEach(btn => {
+    btn.onclick = async () => {
+      const name = btn.dataset.name;
+      const price = btn.dataset.price;
+      const targetBox = btn.closest('.wishlist-item').querySelector('[id^="dealBox-"]');
+      
+      targetBox.style.display = 'block';
+      targetBox.innerHTML = '<div class="hint">Agent evaluating market prices & alternatives...</div>';
+
+      try {
+        const r = await fetch('/api/agents/deal-evaluator', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, price })
+        });
+        const deal = await r.json();
+        
+        let alts = (deal.smart_alternatives || []).map(a => `<li><strong>${escapeHtml(a.name)}</strong> (~${fmt(a.est_price)}): ${escapeHtml(a.advantage)}</li>`).join('');
+        targetBox.innerHTML = `
+          <div class="deal-card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="deal-tag">${escapeHtml(deal.verdict)}</span>
+              <span style="font-family:var(--font-mono); font-size:11px; color:var(--paper-green);">Target: ${fmt(deal.target_deal_price)} (Save ~${fmt(deal.potential_savings)})</span>
+            </div>
+            <div style="font-size:12px; margin-top:8px; line-height:1.4;">${escapeHtml(deal.timing_recommendation)}</div>
+            ${alts ? `<div style="font-size:11px; font-weight:600; margin-top:8px; text-transform:uppercase;">Smart Alternatives:</div><ul style="margin:4px 0; padding-left:18px; font-size:12px;">${alts}</ul>` : ''}
+            <div style="font-size:11px; color:var(--paper-muted); margin-top:6px;">💡 <em>${escapeHtml(deal.haggling_tip || '')}</em></div>
+          </div>
+        `;
+      } catch(e) {
+        targetBox.innerHTML = '<div class="hint">Failed to evaluate deal.</div>';
+      }
+    };
+  });
+
+  list.querySelectorAll('.tl-del').forEach(btn => {
+    btn.onclick = async () => {
+      await fetch(`/api/wishlist/${btn.dataset.id}`, { method:'DELETE' });
+      loadWishlist();
+    };
+  });
+}
+
+async function loadPriceHistory(id){
+  try {
+    const r = await fetch(`/api/wishlist/${id}/history`);
+    const d = await r.json();
+    const canvas = document.getElementById(`priceHistory-${id}`);
+    if (!canvas || !window.Chart) return;
+    const points = (d.history || []).map(x => ({ x: new Date(x.checked_at), y: Number(x.price) }));
+    if (canvas._chart) canvas._chart.destroy();
+    canvas._chart = new Chart(canvas.getContext('2d'), {
+      type:'line',
+      data:{ datasets:[{ label:'Price', data:points, parsing:{xAxisKey:'x', yAxisKey:'y'}, tension:.25, pointRadius:3, borderWidth:2 }] },
+      options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ type:'time', time:{ unit: points.length > 10 ? 'week' : 'day' }, grid:{display:false} }, y:{ ticks:{ callback:v => '₹'+Number(v).toLocaleString('en-IN') } } }, plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:ctx=>' ₹'+Number(ctx.parsed.y).toLocaleString('en-IN') } } } }
+    });
+  } catch(e) {}
+}
+
+document.getElementById('wlImportBtn').onclick = async () => {
+  const input = document.getElementById('wlUrl');
+  const url = input.value.trim();
+  const btn = document.getElementById('wlImportBtn');
+  if (!url) { alert('Paste an Amazon or Flipkart product link.'); return; }
+  btn.disabled = true; btn.textContent = 'Reading product…';
+  try {
+    const r = await fetch('/api/wishlist/import', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({url})
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Could not read product page.');
+    if (d.needs_price_confirmation) {
+      const name = prompt(`${d.message}\n\nPlatform: ${d.platform || 'Store'}\n\nProduct name:`, d.name || 'Wishlist item');
+      if (name === null || !name.trim()) return;
+      const raw = prompt('Enter the current price (₹) to start tracking:', '');
+      if (raw === null) return;
+      const price = parseFloat(String(raw).replace(/[,₹ ]/g, ''));
+      if (!price || price <= 0) { alert('Please enter a valid current price to start tracking.'); return; }
+      if (!name || !name.trim()) return;
+      const ar = await fetch('/api/wishlist', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name.trim(), price, product_url:url, platform:d.platform})});
+      const ad = await ar.json();
+      if (!ar.ok) throw new Error(ad.error || 'Could not add product.');
+    }
+    input.value = '';
+    await loadWishlist();
+  } catch(e) { alert(e.message); }
+  finally { btn.disabled = false; btn.textContent = 'Add Product Link'; }
+};
+
+document.getElementById('wlAddBtn').onclick = async () => {
+  const name = document.getElementById('wlName').value.trim();
+  const price = document.getElementById('wlPrice').value;
+  if (!name || !price){ alert('Enter product name and price.'); return; }
+  await fetch('/api/wishlist', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name, price: parseFloat(price)})
+  });
+  document.getElementById('wlName').value = '';
+  document.getElementById('wlPrice').value = '';
+  loadWishlist();
+};
+
+
+/* ---------- Flight Tracking ---------- */
+async function loadFlights(){
+  const list = document.getElementById('flightList');
+  if (!list) return;
+  try {
+    const r = await fetch('/api/flights');
+    const items = await r.json();
+    list.innerHTML = '';
+    if (!items.length){ list.innerHTML = '<div class="flight-empty">No flights are being tracked yet.</div>'; return; }
+    items.forEach(it => {
+      const card = document.createElement('div'); card.className='flight-card';
+      const current = it.current_price != null ? fmt(it.current_price) : '—';
+      const low = it.lowest_price != null ? fmt(it.lowest_price) : '—';
+      const target = it.target_price != null ? fmt(it.target_price) : 'Not set';
+      card.innerHTML = `
+        <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;">
+          <div><div class="flight-route">${escapeHtml(it.origin)} → ${escapeHtml(it.destination)}</div>
+            <div class="flight-meta"><span class="flight-pill">${escapeHtml(it.travel_class)}</span><span>${escapeHtml(it.departure_date)}</span><span>${it.return_date ? 'Return '+escapeHtml(it.return_date) : 'One-way'}</span><span>${it.adults} traveller(s)</span></div>
+          </div>
+          <div style="text-align:right"><div class="flight-price">${current}</div><div class="hint">Lowest ${low}</div></div>
+        </div>
+        <div class="flight-meta" style="margin-top:10px"><span>Target: ${target}</span><span>${it.active ? 'Tracking active' : 'Paused'}</span></div>
+        <div class="flight-history-wrap"><canvas id="flightHistory-${it.id}"></canvas></div>
+        <div class="flight-actions"><button class="btn-ghost btn-check-flight" data-id="${it.id}">↻ Check fare now</button><button class="tl-del btn-delete-flight" data-id="${it.id}">✕ Remove</button></div>
+        <div class="flight-status" id="flightStatus-${it.id}"></div>
+        <div id="flightFares-${it.id}" style="margin-top:10px;"></div>`;
+      card.dataset.origin = it.origin;
+      card.dataset.destination = it.destination;
+      card.dataset.departureDate = it.departure_date;
+      card.dataset.returnDate = it.return_date || '';
+      card.dataset.adults = it.adults;
+      card.dataset.travelClass = it.travel_class;
+      list.appendChild(card); loadFlightHistory(it.id);
+    });
+    list.querySelectorAll('.btn-check-flight').forEach(btn => btn.onclick = async () => {
+      btn.disabled=true; btn.textContent='Checking…';
+      try {
+        const r=await fetch(`/api/flights/${btn.dataset.id}/check`,{method:'POST'});
+        const d=await r.json();
+        if(!r.ok) throw new Error(d.error||'Could not check fare.');
+        await loadFlights();
+        document.getElementById(`flightStatus-${btn.dataset.id}`).textContent=`Latest fare: ${fmt(d.price)}`;
+        renderFareResults(d.fares || [], `flightFares-${btn.dataset.id}`);
+      }
+      catch(e){ alert(e.message); btn.disabled=false; btn.textContent='↻ Check fare now'; }
+    });
+    list.querySelectorAll('.btn-delete-flight').forEach(btn => btn.onclick = async () => { await fetch(`/api/flights/${btn.dataset.id}`,{method:'DELETE'}); loadFlights(); });
+  } catch(e){ list.innerHTML='<div class="flight-empty">Could not load flight trackers.</div>'; }
+}
+
+async function loadFlightHistory(id){
+  try{
+    const r=await fetch(`/api/flights/${id}/history`); const d=await r.json(); const canvas=document.getElementById(`flightHistory-${id}`);
+    if(!canvas || !window.Chart) return;
+    const rows=(d.history||[]);
+    const labels=rows.map(x=>new Date(x.checked_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}));
+    const values=rows.map(x=>Number(x.price));
+    if(canvas._chart) canvas._chart.destroy();
+    canvas._chart=new Chart(canvas.getContext('2d'),{type:'line',data:{labels,datasets:[{label:'Fare',data:values,tension:.25,pointRadius:3,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,scales:{x:{grid:{display:false}},y:{ticks:{callback:v=>'₹'+Number(v).toLocaleString('en-IN')}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' ₹'+Number(c.parsed.y).toLocaleString('en-IN')}}}}});
+  }catch(e){}
+}
+
+async function readJsonResponse(response){
+  const contentType = response.headers.get('content-type') || '';
+  const raw = await response.text();
+  if (!contentType.includes('application/json')) {
+    const looksHtml = /^\s*<!doctype html/i.test(raw) || /<html[\s>]/i.test(raw);
+    throw new Error(looksHtml
+      ? `Super Snaps received an HTML error page (HTTP ${response.status}). Make sure Flask is running the latest app.py and that /api/flights is available.`
+      : `Server returned an unexpected response (HTTP ${response.status}).`);
+  }
+  let data;
+  try { data = JSON.parse(raw); }
+  catch (_) { throw new Error(`Server returned invalid JSON (HTTP ${response.status}).`); }
+  if (!response.ok) throw new Error(data.error || data.message || `Request failed (HTTP ${response.status}).`);
+  return data;
+}
+
+function readFlightFormValues(){
+  return {
+    origin: document.getElementById('flightOrigin').value.trim().toUpperCase(),
+    destination: document.getElementById('flightDestination').value.trim().toUpperCase(),
+    departure_date: document.getElementById('flightDeparture').value,
+    return_date: document.getElementById('flightReturn').value,
+    adults: document.getElementById('flightAdults').value,
+    travel_class: document.getElementById('flightClass').value
+  };
+}
+
+function renderFareResults(fares, containerId = 'flightSearchResults'){
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  if (!fares.length){ box.innerHTML = '<div class="flight-empty">No fares found for that route and date.</div>'; return; }
+  const rows = fares.map(f => {
+    const stopsLabel = f.stops === 0 ? 'Nonstop' : (f.stops + (f.stops === 1 ? ' stop' : ' stops'));
+    const durationLabel = f.duration_minutes ? `${Math.floor(f.duration_minutes/60)}h ${f.duration_minutes%60}m` : '';
+    const meta = [stopsLabel, durationLabel].filter(Boolean).join(' · ');
+    return `<div class="fare-row">
+      <div><div class="fare-airline">${escapeHtml(f.airline)}</div><div class="fare-meta">${escapeHtml(meta)}</div></div>
+      <div class="fare-price">${fmt(f.price)}</div>
+    </div>`;
+  }).join('');
+  box.innerHTML = `<div class="hint" style="margin-bottom:8px;">${fares.length} fare(s), cheapest first:</div><div class="fare-list">${rows}</div>`;
+}
+
+document.getElementById('btnSearchFlights').onclick = async () => {
+  const payload = readFlightFormValues();
+  const btn = document.getElementById('btnSearchFlights');
+  const hint = document.getElementById('flightSetupHint');
+  const box = document.getElementById('flightSearchResults');
+
+  if (!payload.origin || !payload.destination || !payload.departure_date){
+    hint.textContent = 'Enter From, To, and Departure date to search fares.';
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Searching…'; hint.textContent = ''; box.innerHTML = '';
+  try {
+    const r = await fetch('/api/flights/search', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','Accept':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const d = await readJsonResponse(r);
+    renderFareResults(d.fares || []);
+  } catch(e){
+    hint.textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Search Fares';
+  }
+};
+
+document.getElementById('btnAddFlight').onclick = async () => {
+  const payload={origin:document.getElementById('flightOrigin').value.trim().toUpperCase(),destination:document.getElementById('flightDestination').value.trim().toUpperCase(),departure_date:document.getElementById('flightDeparture').value,return_date:document.getElementById('flightReturn').value,adults:document.getElementById('flightAdults').value,travel_class:document.getElementById('flightClass').value,target_price:document.getElementById('flightTarget').value,notify_email:document.getElementById('flightEmail').value.trim()};
+  const btn=document.getElementById('btnAddFlight'); const hint=document.getElementById('flightSetupHint');
+  btn.disabled=true; btn.textContent='Starting tracker…'; hint.textContent='';
+  try {
+    const r=await fetch('/api/flights',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)});
+    const d=await readJsonResponse(r);
+    hint.textContent=d.warning ? `Tracker saved, but the first fare check failed: ${d.warning}` : 'Flight tracker started.';
+    ['flightOrigin','flightDestination','flightDeparture','flightReturn','flightTarget','flightEmail'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('flightSearchResults').innerHTML='';
+    await loadFlights();
+  } catch(e){ hint.textContent=e.message; }
+  finally{ btn.disabled=false; btn.textContent='Start Tracking'; }
+};
+
+/* ---------- Spending Insights ---------- */
+async function loadInsights(){
+  const card = document.getElementById('insightsCard');
+  const badge = document.getElementById('insightsSourceBadge');
+  try {
+    const r = await fetch('/api/insights');
+    const d = await r.json();
+    badge.className = `source-badge ${d.source === 'groq' ? 'groq' : 'rules'}`;
+    badge.textContent = d.source === 'groq' ? 'Groq Review' : 'Rule Analysis';
+
+    let html = `<span class="verdict-badge ${d.verdict}">${d.verdict.toUpperCase()}</span>`;
+    html += `<div style="font-size:14px; line-height:1.5; margin-bottom:14px;">${escapeHtml(d.summary || '')}</div>`;
+
+    if (d.suggestions && d.suggestions.length){
+      html += '<label class="field-label">Actionable Suggestions</label><ul class="suggestion-list">' +
+        d.suggestions.map(s => `<li>${escapeHtml(s)}</li>`).join('') + '</ul>';
+    }
+
+    if (d.next_month_budget){
+      html += '<label class="field-label" style="margin-top:14px;">Suggested Next Month Budget</label><div class="budget-row">' +
+        `<div class="budget-box"><div class="label">Discretionary Purchases</div><div class="value">${fmt(d.next_month_budget.purchases)}</div></div>` +
+        `<div class="budget-box"><div class="label">Fixed Needs</div><div class="value">${fmt(d.next_month_budget.fixed_expenses)}</div></div>` +
+        '</div>';
+    }
+    card.innerHTML = html;
+  } catch(e){
+    card.innerHTML = '<div class="tl-empty">Unable to load insights right now.</div>';
+  }
+}
+
+/* ---------- Modals & Plus (+) Action Hub ---------- */
+const modal = document.getElementById('modalOverlay');
+const sheet = document.getElementById('actionSheetV3');
+const closeSheet = () => sheet.classList.remove('open');
+
+document.getElementById('fabAdd').onclick = () => sheet.classList.add('open');
+document.getElementById('actionCloseV3').onclick = closeSheet;
+sheet.onclick = e => { if (e.target === sheet) closeSheet(); };
+
+/* ---------- Floating Chat Assistant ---------- */
+const chatPanel = document.getElementById('chatPanel');
+document.getElementById('chatFab').onclick = () => {
+  chatPanel.classList.toggle('open');
+  if (chatPanel.classList.contains('open')) {
+    document.getElementById('chatInput').focus();
+  }
+};
+document.getElementById('chatPanelClose').onclick = () => chatPanel.classList.remove('open');
+
+document.getElementById('actionExpenseV3').onclick = () => {
+  closeSheet();
+  modal.classList.add('open');
+};
+document.getElementById('btnManualPurchase').onclick = () => modal.classList.add('open');
+document.getElementById('cancelAddBtn').onclick = () => modal.classList.remove('open');
+modal.onclick = e => { if (e.target === modal) modal.classList.remove('open'); };
+
+document.getElementById('actionWishlistV3').onclick = () => {
+  closeSheet();
+  activateTab('wishlist');
+  setTimeout(() => document.getElementById('wlName').focus(), 150);
+};
+
+document.getElementById('actionFixedV3').onclick = () => {
+  closeSheet();
+  activateTab('spending');
+  setTimeout(() => document.getElementById('expenseInput').focus(), 150);
+};
+
+document.getElementById('confirmAddBtn').onclick = async () => {
+  const name = document.getElementById('prodName').value.trim();
+  const price = document.getElementById('prodPrice').value;
+  const purchased_on = document.getElementById('prodDate').value;
+  if (!name || !price){ alert('Enter both name and price.'); return; }
+
+  await fetch('/api/purchases', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name, price: parseFloat(price), purchased_on})
+  });
+  document.getElementById('prodName').value = '';
+  document.getElementById('prodPrice').value = '';
+  modal.classList.remove('open');
+  refreshAll();
+};
+/* ---------- Financial Chatbot ---------- */
+async function sendChatMessage() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  const history = document.getElementById('chatHistory');
+  
+  // User message bubble
+  const userDiv = document.createElement('div');
+  userDiv.style.cssText = 'align-self: flex-end; background: var(--paper-green); color: #fff; padding: 8px 12px; border-radius: 10px; font-size: 13px; max-width: 80%;';
+  userDiv.textContent = msg;
+  history.appendChild(userDiv);
+  input.value = '';
+
+  // Bot loading bubble
+  const botDiv = document.createElement('div');
+  botDiv.style.cssText = 'align-self: flex-start; background: var(--paper-card); padding: 8px 12px; border-radius: 10px; font-size: 13px; max-width: 80%;';
+  botDiv.textContent = 'Thinking...';
+  history.appendChild(botDiv);
+  history.scrollTop = history.scrollHeight;
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg })
+    });
+    const data = await res.json();
+    botDiv.innerHTML = escapeHtml(data.reply);
+    // SQL is internal and intentionally hidden from the user interface.
+  } catch (e) {
+    botDiv.textContent = 'Sorry, I ran into an error retrieving your records.';
+  }
+  history.scrollTop = history.scrollHeight;
+}
+
+document.getElementById('btnSendChat').onclick = sendChatMessage;
+document.getElementById('chatInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendChatMessage();
+});
+// Initial Load
+refreshAll();
+</script>
+</body>
+</html>
