@@ -38,8 +38,8 @@ except ImportError:  # requests is in requirements.txt; guard just in case
 # limit, network issue), parse_expense() automatically falls back to the
 # local regex parser below, so callers never have to handle an LLM failure.
 
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-GROQ_API_URL = ""
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
 def is_llm_configured() -> bool:

@@ -199,6 +199,29 @@
   .source-badge.groq { background: var(--paper-green-soft); color: var(--paper-green-dark); }
   .source-badge.regex, .source-badge.rules { background: var(--paper-card-2); color: var(--paper-muted); }
 
+  /* --- Sara response formatting --- */
+  .sara-heading{font-family:var(--font-display);font-size:16px;font-weight:600;margin:8px 0 6px;color:var(--paper-green-dark)}
+  .sara-bullet,.sara-number{margin:5px 0;line-height:1.55}.sara-gap{height:6px}.sara-table-wrap{overflow-x:auto;margin:10px 0}.sara-table{width:100%;border-collapse:collapse;font-size:12px}.sara-table th,.sara-table td{padding:8px 9px;border:1px solid var(--paper-line);text-align:left}.sara-table th{background:var(--paper-green-soft);color:var(--paper-green-dark);font-family:var(--font-mono);font-size:10px;text-transform:uppercase}
+
+  /* --- Spent-wise Calendar --- */
+  .spent-calendar-card { margin-bottom: 24px; }
+  .spent-calendar-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; }
+  .spent-calendar-nav { display:flex; align-items:center; gap:8px; }
+  .spent-calendar-nav button { padding:6px 10px; font-size:12px; }
+  .spent-calendar-month { min-width:120px; text-align:center; font-family:var(--font-mono); font-size:12px; color:var(--paper-green-dark); }
+  .spent-calendar-grid { display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:6px; }
+  .spent-calendar-weekday { text-align:center; font:10px var(--font-mono); text-transform:uppercase; color:var(--paper-muted); padding:4px 0; }
+  .spent-calendar-day { position:relative; min-height:54px; border:1px solid var(--paper-line); border-radius:9px; background:rgba(255,255,255,.42); padding:7px; transition:transform .12s ease, border-color .12s ease, background .12s ease; }
+  .spent-calendar-day:hover { transform:translateY(-1px); border-color:var(--paper-green); background:var(--paper-green-soft); }
+  .spent-calendar-day.empty { border-color:transparent; background:transparent; }
+  .spent-calendar-day.today { box-shadow:inset 0 0 0 2px rgba(57,115,76,.28); }
+  .spent-calendar-date { font:11px var(--font-mono); color:var(--paper-ink); }
+  .spent-calendar-amount { margin-top:8px; font:600 11px var(--font-mono); color:var(--paper-green-dark); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .spent-calendar-day.no-spend .spent-calendar-amount { color:var(--paper-muted); font-weight:400; }
+  .spent-calendar-tooltip { position:fixed; z-index:9999; pointer-events:none; display:none; background:var(--paper-ink); color:#fff; padding:8px 10px; border-radius:8px; box-shadow:var(--paper-shadow-hover); font:11px var(--font-mono); line-height:1.5; white-space:nowrap; }
+  .spent-calendar-summary { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:12px; font-size:11px; color:var(--paper-muted); }
+  @media (max-width:700px){ .spent-calendar-day{min-height:46px;padding:5px}.spent-calendar-amount{font-size:10px;margin-top:5px}.spent-calendar-grid{gap:4px}.spent-calendar-month{min-width:105px} }
+
   /* --- Safe to Spend Meter --- */
   .safe-meter-card {
     background: linear-gradient(135deg, rgba(219,233,217,.7), rgba(245,240,227,.9));
@@ -493,6 +516,7 @@
     <button class="dashboard-tab" data-tab="wishlist">♡ <span>Wishlist &amp; Deals</span></button>
     <button class="dashboard-tab" data-tab="flights">✈ <span>Flight Tracking</span></button>
     <button class="dashboard-tab" data-tab="insights">✦ <span>Insights &amp; Agents</span></button>
+    <button class="dashboard-tab" data-tab="sara">◆ <span>Sara</span></button>
   </nav>
   <div class="sidebar-foot">SUPER SNAPS<br><span>Spend thoughtfully.</span></div>
 </aside>
@@ -550,6 +574,27 @@
           </div>
         </div>
       </div>
+
+      <!-- Spent-wise Calendar -->
+      <div class="card spent-calendar-card">
+        <div class="spent-calendar-head">
+          <div>
+            <h3 style="margin:0;"><span class="num">02</span>Spending Calendar</h3>
+            <div class="hint" style="margin-top:4px;">Hover over a date to see how much you spent that day.</div>
+          </div>
+          <div class="spent-calendar-nav">
+            <button class="btn-ghost" id="spentCalendarPrev" aria-label="Previous month">←</button>
+            <div class="spent-calendar-month" id="spentCalendarMonth">—</div>
+            <button class="btn-ghost" id="spentCalendarNext" aria-label="Next month">→</button>
+          </div>
+        </div>
+        <div id="spentCalendarGrid" class="spent-calendar-grid"></div>
+        <div class="spent-calendar-summary">
+          <span id="spentCalendarTotal">Total spent: —</span>
+          <span id="spentCalendarDays">Spending days: —</span>
+        </div>
+      </div>
+      <div id="spentCalendarTooltip" class="spent-calendar-tooltip"></div>
 
       <!-- Salary & Savings Setup -->
       <div class="card">
@@ -824,6 +869,28 @@
       </div>
     </section>
 
+    <section class="true-panel" data-workspace="sara">
+      <div class="workspace-title">
+        <div>
+          <div class="workspace-kicker">Supervisor Agent</div>
+          <h2>Sara</h2>
+          <p>Tell Sara what you need — she routes it to the right part of Ledger for you.</p>
+        </div>
+        <span class="source-badge" id="saraSourceBadge"></span>
+      </div>
+      <div class="card" style="display:flex; flex-direction:column; height:520px;">
+        <div id="saraHistory" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; margin-bottom:12px; padding:10px; background:rgba(255,255,255,.4); border-radius:10px; border:1px solid var(--paper-line);">
+          <div style="align-self:flex-start; background:var(--paper-card); padding:8px 12px; border-radius:10px; font-size:13px;">
+            👋 Hi, I'm Sara. Try things like <em>"Add a ₹1200 purchase for headphones today"</em>, <em>"Track a DEL→BOM flight for Dec 1"</em>, or <em>"How am I doing on my budget this month?"</em>
+          </div>
+        </div>
+        <div class="row">
+          <div><input type="text" id="saraInput" placeholder="Tell Sara what you need..."></div>
+          <button class="btn-primary" id="btnSendSara">Send</button>
+        </div>
+      </div>
+    </section>
+
   </div>
 </div>
 
@@ -909,6 +976,11 @@ document.getElementById('prodDate').value = today.toISOString().slice(0,10);
 const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN', {maximumFractionDigits: 0});
 function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function escapeAttr(s){ return String(s).replace(/"/g, '&quot;'); }
+function renderSaraMarkdown(text){
+  const lines=String(text||'').split(/\r?\n/);let html='',table=[];
+  const inl=v=>escapeHtml(v).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>');
+  const flush=()=>{if(!table.length)return;const rows=table.filter(r=>!/^[\s|:-]+$/.test(r));if(rows.length){const cells=rows.map(r=>r.split('|').map(x=>x.trim()).filter((_,i,a)=>!(i===0&&!a[0])&&!(i===a.length-1&&!a[a.length-1])));const h=cells.shift()||[];html+='<div class="sara-table-wrap"><table class="sara-table"><thead><tr>'+h.map(c=>`<th>${inl(c)}</th>`).join('')+'</tr></thead><tbody>'+cells.map(r=>'<tr>'+r.map(c=>`<td>${inl(c)}</td>`).join('')+'</tr>').join('')+'</tbody></table></div>';}table=[];};
+  lines.forEach(l=>{if(/^\s*\|/.test(l)&&l.includes('|')){table.push(l);return;}flush();if(!l.trim()){html+='<div class="sara-gap"></div>';return;}if(/^#{1,3}\s+/.test(l)){html+=`<div class="sara-heading">${inl(l.replace(/^#{1,3}\s+/,''))}</div>`;return;}if(/^\s*[-*]\s+/.test(l)){html+=`<div class="sara-bullet">• ${inl(l.replace(/^\s*[-*]\s+/,''))}</div>`;return;}if(/^\s*\d+[.)]\s+/.test(l)){html+=`<div class="sara-number">${inl(l.trim())}</div>`;return;}html+=`<div>${inl(l)}</div>`;});flush();return html;}
 
 let chart;
 let currentMonthlySavings = 0;
@@ -937,16 +1009,52 @@ function activateTab(name){
 
 tabs.forEach(t => t.addEventListener('click', () => activateTab(t.dataset.tab)));
 const savedTab = localStorage.getItem('ledgerActiveTab');
-if (savedTab && ['overview','transactions','spending','wishlist','flights','insights'].includes(savedTab)) {
+if (savedTab && ['overview','transactions','spending','wishlist','flights','insights','sara'].includes(savedTab)) {
   activateTab(savedTab);
 }
+
+/* ---------- Spent-wise Calendar ---------- */
+let spentCalendarDate = new Date();
+spentCalendarDate.setDate(1);
+function positionSpentCalendarTooltip(e){
+  const tip=document.getElementById('spentCalendarTooltip'); if(!tip)return;
+  tip.style.left=`${Math.min(e.clientX+12,window.innerWidth-tip.offsetWidth-12)}px`;
+  tip.style.top=`${Math.min(e.clientY+12,window.innerHeight-tip.offsetHeight-12)}px`;
+}
+async function loadSpentCalendar(){
+  const grid=document.getElementById('spentCalendarGrid'); if(!grid)return;
+  const label=document.getElementById('spentCalendarMonth'), totalEl=document.getElementById('spentCalendarTotal'), daysEl=document.getElementById('spentCalendarDays');
+  const year=spentCalendarDate.getFullYear(), month=spentCalendarDate.getMonth()+1;
+  label.textContent=spentCalendarDate.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+  grid.innerHTML='';
+  ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(x=>{const e=document.createElement('div');e.className='spent-calendar-weekday';e.textContent=x;grid.appendChild(e);});
+  try{
+    const r=await fetch(`/api/day-expenses?year=${year}&month=${month}`), d=await r.json(); if(!r.ok)throw new Error();
+    const totals={}; (d.day_totals||[]).forEach(x=>totals[x.date]=Number(x.total||0));
+    const first=new Date(year,month-1,1), offset=(first.getDay()+6)%7, days=new Date(year,month,0).getDate();
+    const today=new Date(); today.setHours(0,0,0,0); let total=0, count=0;
+    for(let i=0;i<offset;i++){const e=document.createElement('div');e.className='spent-calendar-day empty';grid.appendChild(e);}
+    for(let day=1;day<=days;day++){
+      const key=`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`, amount=Number(totals[key]||0), dt=new Date(year,month-1,day);
+      total+=amount;if(amount>0)count++;
+      const e=document.createElement('div'); e.className='spent-calendar-day '+(amount>0?'':'no-spend');
+      if(dt.getTime()===today.getTime())e.classList.add('today');
+      e.innerHTML=`<div class="spent-calendar-date">${day}</div><div class="spent-calendar-amount">${amount>0?fmt(amount):'—'}</div>`;
+      e.onmouseenter=ev=>{const t=document.getElementById('spentCalendarTooltip');t.innerHTML=`<strong>${dt.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</strong><br>${amount>0?'Spent: '+fmt(amount):'No spending recorded'}`;t.style.display='block';positionSpentCalendarTooltip(ev);};
+      e.onmousemove=positionSpentCalendarTooltip; e.onmouseleave=()=>{document.getElementById('spentCalendarTooltip').style.display='none';}; grid.appendChild(e);
+    }
+    totalEl.textContent=`Total spent: ${fmt(total)}`; daysEl.textContent=`Spending days: ${count}`;
+  }catch(e){grid.innerHTML='<div class="hint" style="grid-column:1/-1;">Could not load spending calendar.</div>';totalEl.textContent='Total spent: —';daysEl.textContent='Spending days: —';}
+}
+document.getElementById('spentCalendarPrev').onclick=()=>{spentCalendarDate.setMonth(spentCalendarDate.getMonth()-1);loadSpentCalendar();};
+document.getElementById('spentCalendarNext').onclick=()=>{const n=new Date(spentCalendarDate);n.setMonth(n.getMonth()+1);const now=new Date();if(n.getFullYear()>now.getFullYear()||(n.getFullYear()===now.getFullYear()&&n.getMonth()>now.getMonth()))return;spentCalendarDate=n;loadSpentCalendar();};
 
 /* ---------- Global Refresh ---------- */
 async function refreshAll(){
   await Promise.all([
     loadSalary(), loadTimeline(), loadSummary(), loadStatus(),
     loadProfile(), loadRecommendations(), loadWishlist(),
-    loadSavingsPercent(), loadInsights(), loadDayExpenses(),
+    loadSavingsPercent(), loadInsights(), loadDayExpenses(), loadSpentCalendar(),
     loadSafeToSpend(), loadFlights()
   ]);
 }
@@ -1082,6 +1190,11 @@ async function loadStatus(){
       hint.innerHTML = 'Parsed by <b style="color:var(--paper-green)">Groq</b> — handles natural phrasing effortlessly[cite: 1, 4].';
     } else {
       hint.innerHTML = 'Groq key not set — using local rule parser. Supports phrases like <code>12k on rent</code>[cite: 1, 4].';
+    }
+    const saraBadge = document.getElementById('saraSourceBadge');
+    if (saraBadge) {
+      saraBadge.textContent = d.groq_configured ? 'Ready' : 'Needs GROQ_API_KEY';
+      saraBadge.classList.toggle('groq', !!d.groq_configured);
     }
   } catch(e){}
 }
@@ -1801,6 +1914,60 @@ document.getElementById('btnSendChat').onclick = sendChatMessage;
 document.getElementById('chatInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') sendChatMessage();
 });
+
+/* ---------- Sara (supervisor agent) ---------- */
+let saraConversation = [];
+
+async function sendSaraMessage() {
+  const input = document.getElementById('saraInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  const history = document.getElementById('saraHistory');
+
+  const userDiv = document.createElement('div');
+  userDiv.style.cssText = 'align-self: flex-end; background: var(--paper-green); color: #fff; padding: 8px 12px; border-radius: 10px; font-size: 13px; max-width: 80%;';
+  userDiv.textContent = msg;
+  history.appendChild(userDiv);
+  input.value = '';
+
+  const botDiv = document.createElement('div');
+  botDiv.style.cssText = 'align-self: flex-start; background: var(--paper-card); padding: 8px 12px; border-radius: 10px; font-size: 13px; max-width: 80%;';
+  botDiv.textContent = 'Working on it...';
+  history.appendChild(botDiv);
+  history.scrollTop = history.scrollHeight;
+
+  try {
+    const res = await fetch('/api/sara/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, history: saraConversation })
+    });
+    const data = await res.json();
+    botDiv.innerHTML = renderSaraMarkdown(data.reply || 'Done.');
+
+    saraConversation.push({ role: 'user', content: msg });
+    saraConversation.push({ role: 'assistant', content: data.reply || '' });
+    if (saraConversation.length > 20) saraConversation = saraConversation.slice(-20);
+
+    const madeChange = (data.actions || []).some(a =>
+      a.result && typeof a.result.status === 'number' && a.result.status < 400 &&
+      a.tool && a.tool !== 'ask_financial_question' && !a.tool.startsWith('get_') &&
+      !a.tool.startsWith('list_') && !a.tool.startsWith('search_') && a.tool !== 'run_spend_cutter_plan' &&
+      a.tool !== 'evaluate_deal'
+    );
+    if (madeChange) refreshAll();
+  } catch (e) {
+    botDiv.textContent = "Sorry, I couldn't reach Sara right now.";
+  }
+  history.scrollTop = history.scrollHeight;
+}
+
+document.getElementById('btnSendSara').onclick = sendSaraMessage;
+document.getElementById('saraInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendSaraMessage();
+});
+
 // Initial Load
 refreshAll();
 </script>
