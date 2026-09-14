@@ -1,9 +1,14 @@
-Flask>=3.0
-requests>=2.31
+# Core
+Flask==3.0.3
+requests==2.32.3
+beautifulsoup4==4.12.3
 
-# Optional — only needed for the local OCR fallback when a screenshot is
-# uploaded but Groq isn't configured / the vision call fails. The app runs
-# fine without these; parse_expense_screenshot() just returns [] from the
-# OCR path (source="ocr", no items) until they're installed.
-pytesseract>=0.3.10
-Pillow>=10.0
+# Postgres support — only actually imported when DATABASE_URL is set
+# (see db_pg.py); local SQLite mode (the default) doesn't need this, but
+# it's listed unconditionally so `pip install -r requirements.txt` works
+# for either mode without a second install step.
+psycopg2-binary==2.9.9
+
+# Production WSGI server — used on Render (see render.yaml); not needed
+# for local `python app.py`, which uses Flask's built-in dev server.
+gunicorn==22.0.0

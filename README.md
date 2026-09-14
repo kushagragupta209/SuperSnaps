@@ -1,4 +1,4 @@
-# SuperSnaps
+# Ledger — Purchase Timeline & Expense Tracker
 
 ## Run it
 ```

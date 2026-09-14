@@ -2,211 +2,87 @@
 telegram_sync.py — Ledger's Telegram inbox sync.
 
 Kept separate from app.py on purpose, same reasoning as flights.py and
-agent.py: this is where the external call to Supabase lives, so app.py's
+agent.py: this is where the Telegram-specific logic lives, so app.py's
 routes stay thin.
 
 Why this exists: a Telegram bot needs an always-on machine to catch
 messages at any time, and Telegram itself only holds undelivered updates
-for 24 hours (see core.telegram.org/bots/api, getUpdates). Since Ledger's
-Flask app only runs on-demand on a laptop, neither fits directly — so a
-small Cloudflare Worker (always-on, free, see telegram-webhook-worker.js)
+for 24 hours (see core.telegram.org/bots/api, getUpdates). A small
+Cloudflare Worker (always-on, free — see telegram-webhook-worker.js)
 receives Telegram's webhook the instant a message arrives and writes the
-raw text into a `pending_expenses` table in a free-tier Supabase Postgres
-project. That table is the durable "global inbox": messages sit there
-indefinitely (no 24-hour risk) until Ledger is launched and calls
-fetch_pending() to pull them in. app.py then parses each one with
-agent.parse_day_expense(), inserts into the local day_expenses table, and
-calls mark_processed() so the same message isn't synced twice.
+raw text into a `pending_expenses` table. That table is the durable
+"global inbox": messages sit there indefinitely (no 24-hour risk) until
+Ledger fetches them via fetch_pending(), parses each one with
+agent.parse_day_expense(), inserts into day_expenses, and calls
+mark_processed() so the same message isn't synced twice.
+
+fetch_pending()/mark_processed() run as plain SQL against `db` — the SAME
+Postgres connection app.py's routes already use (see db_pg.py) — rather
+than a separate call to Supabase's REST API. That's possible because once
+DATABASE_URL points Ledger at Postgres (e.g. for Render deployment,
+pointed at your existing Supabase project), `pending_expenses` just lives
+in that same database as another table: written into by the Cloudflare
+Worker via Supabase's REST API (unchanged on that side), read here
+directly (no second REST layer needed on this side).
 
 Public interface used by app.py:
-    fetch_pending() -> list[dict]      # unprocessed inbox rows, oldest first
-    mark_processed(ids: list[int])     -> None
+    fetch_pending(db) -> list[dict]      # unprocessed inbox rows, oldest first
+    mark_processed(db, ids: list[int])   -> None
     is_telegram_sync_configured() -> bool
+    send_message(chat_id, text) -> bool
+    is_telegram_reply_configured() -> bool
 """
 
 import os
+
+import db_pg
 
 try:
     import requests
 except ImportError:  # requests is in requirements.txt; guard just in case
     requests = None
 
-
-# --------------------------------------------------------------------------- #
-# Config — Supabase (https://supabase.com), free tier
-# --------------------------------------------------------------------------- #
+# Only needed for send_message() below — the actual bot token from
+# BotFather, used to call Telegram's own sendMessage API so Ledger can
+# reply in the same chat after a sync. Separate from the Cloudflare
+# Worker's webhook secret, and separate from DATABASE_URL.
 #
-# Set these in your shell before running the app:
-#   export SUPABASE_URL="https://xxxx.supabase.co"
-#   export SUPABASE_SERVICE_KEY="..."   # Settings -> API -> service_role key
-#
-# Use the service_role key here, never the anon/public key — this table
-# has Row Level Security enabled with no public policies, so only the
-# service_role key (meant for trusted server-side code) can read/write it.
-
-# SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
-# SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
-SUPABASE_URL = "https://udofutzqjmidmjgctqkk.supabase.co"
-SUPABASE_SERVICE_KEY="sb_secret_8ipmy6LdI5iuv7UudfkOyA_87A6ryBa"
-
-def is_telegram_sync_configured() -> bool:
-    """Whether Supabase credentials are present (doesn't guarantee they're valid)."""
-    return bool(SUPABASE_URL and SUPABASE_SERVICE_KEY and requests is not None)
-
-
-def _headers():
-    return {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json",
-    }
-
-
-def fetch_pending():
-    """
-    Return every unprocessed row from the pending_expenses inbox table,
-    oldest first (so entries land in day_expenses in the order they were
-    actually sent). Each row: {id, chat_id, raw_text, telegram_message_id,
-    sent_at, processed, created_at}.
-
-    Raises ValueError if Supabase isn't configured, and
-    requests.RequestException for network/HTTP failures — same pattern
-    as flights.py, so app.py can handle each case consistently.
-    """
-    if not is_telegram_sync_configured():
-        raise ValueError(
-            "Telegram sync isn't configured yet — set SUPABASE_URL and "
-            "SUPABASE_SERVICE_KEY (see telegram_sync.py for setup notes)."
-        )
-
-    resp = requests.get(
-        f"{SUPABASE_URL}/rest/v1/pending_expenses",
-        headers=_headers(),
-        params={"processed": "eq.false", "order": "sent_at.asc", "select": "*"},
-        timeout=15,
-    )
-    resp.raise_for_status()
-    return resp.json()
-
-
-def mark_processed(ids):
-    """
-    Mark the given pending_expenses row ids as processed so fetch_pending()
-    doesn't return them again on the next sync. No-op if ids is empty.
-    """
-    if not ids:
-        return
-    if not is_telegram_sync_configured():
-        raise ValueError("Telegram sync isn't configured yet.")
-
-    id_list = ",".join(str(int(i)) for i in ids)
-    resp = requests.patch(
-        f"{SUPABASE_URL}/rest/v1/pending_expenses",
-        headers=_headers(),
-        params={"id": f"in.({id_list})"},
-        json={"processed": True},
-        timeout=15,
-    )
-    resp.raise_for_status()
-
-
-
-    """
-telegram_sync.py — Ledger's Telegram inbox sync.
-
-Kept separate from app.py on purpose, same reasoning as flights.py and
-agent.py: this is where the external call to Supabase lives, so app.py's
-routes stay thin.
-
-Why this exists: a Telegram bot needs an always-on machine to catch
-messages at any time, and Telegram itself only holds undelivered updates
-for 24 hours (see core.telegram.org/bots/api, getUpdates). Since Ledger's
-Flask app only runs on-demand on a laptop, neither fits directly — so a
-small Cloudflare Worker (always-on, free, see telegram-webhook-worker.js)
-receives Telegram's webhook the instant a message arrives and writes the
-raw text into a `pending_expenses` table in a free-tier Supabase Postgres
-project. That table is the durable "global inbox": messages sit there
-indefinitely (no 24-hour risk) until Ledger is launched and calls
-fetch_pending() to pull them in. app.py then parses each one with
-agent.parse_day_expense(), inserts into the local day_expenses table, and
-calls mark_processed() so the same message isn't synced twice.
-
-Public interface used by app.py:
-    fetch_pending() -> list[dict]      # unprocessed inbox rows, oldest first
-    mark_processed(ids: list[int])     -> None
-    is_telegram_sync_configured() -> bool
-"""
-
-import os
-
-try:
-    import requests
-except ImportError:  # requests is in requirements.txt; guard just in case
-    requests = None
-
-
-# --------------------------------------------------------------------------- #
-# Config — Supabase (https://supabase.com), free tier
-# --------------------------------------------------------------------------- #
-#
-# Set these in your shell before running the app:
-#   export SUPABASE_URL="https://xxxx.supabase.co"
-#   export SUPABASE_SERVICE_KEY="..."   # Settings -> API -> service_role key
-#
-# Use the service_role key here, never the anon/public key — this table
-# has Row Level Security enabled with no public policies, so only the
-# service_role key (meant for trusted server-side code) can read/write it.
-
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
-
-# Only needed for send_message() below — separate from the webhook secret,
-# this is the actual bot token from BotFather, used to call Telegram's own
-# sendMessage API so Ledger can reply in the same chat after a sync.
+# NEVER hardcode this (or DATABASE_URL, or any other secret) directly in
+# this file — always pass it as an environment variable. A hardcoded
+# secret gets committed to git history the moment this file is pushed,
+# and stays recoverable there even after you edit it back out later.
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 
 
 def is_telegram_sync_configured() -> bool:
-    """Whether Supabase credentials are present (doesn't guarantee they're valid)."""
-    return bool(SUPABASE_URL and SUPABASE_SERVICE_KEY and requests is not None)
+    """Whether Ledger is running against Postgres (where pending_expenses lives)."""
+    return db_pg.is_postgres_configured()
 
 
-def _headers():
-    return {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json",
-    }
-
-
-def fetch_pending():
+def fetch_pending(db):
     """
     Return every unprocessed row from the pending_expenses inbox table,
     oldest first (so entries land in day_expenses in the order they were
     actually sent). Each row: {id, chat_id, raw_text, telegram_message_id,
     sent_at, processed, created_at}.
 
-    Raises ValueError if Supabase isn't configured, and
-    requests.RequestException for network/HTTP failures — same pattern
-    as flights.py, so app.py can handle each case consistently.
+    Raises ValueError if Ledger isn't running against Postgres (local
+    SQLite mode has no pending_expenses table — Telegram sync needs the
+    cloud database).
     """
     if not is_telegram_sync_configured():
         raise ValueError(
-            "Telegram sync isn't configured yet — set SUPABASE_URL and "
-            "SUPABASE_SERVICE_KEY (see telegram_sync.py for setup notes)."
+            "Telegram sync isn't available in local SQLite mode — set "
+            "DATABASE_URL to your Postgres connection string (see "
+            "telegram_sync.py and README's Cloud Deployment section)."
         )
-
-    resp = requests.get(
-        f"{SUPABASE_URL}/rest/v1/pending_expenses",
-        headers=_headers(),
-        params={"processed": "eq.false", "order": "sent_at.asc", "select": "*"},
-        timeout=15,
-    )
-    resp.raise_for_status()
-    return resp.json()
+    rows = db.execute(
+        "SELECT * FROM pending_expenses WHERE processed = false ORDER BY sent_at ASC"
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
-def mark_processed(ids):
+def mark_processed(db, ids):
     """
     Mark the given pending_expenses row ids as processed so fetch_pending()
     doesn't return them again on the next sync. No-op if ids is empty.
@@ -214,17 +90,14 @@ def mark_processed(ids):
     if not ids:
         return
     if not is_telegram_sync_configured():
-        raise ValueError("Telegram sync isn't configured yet.")
+        raise ValueError("Telegram sync isn't available in local SQLite mode.")
 
-    id_list = ",".join(str(int(i)) for i in ids)
-    resp = requests.patch(
-        f"{SUPABASE_URL}/rest/v1/pending_expenses",
-        headers=_headers(),
-        params={"id": f"in.({id_list})"},
-        json={"processed": True},
-        timeout=15,
+    placeholders = ",".join("?" for _ in ids)
+    db.execute(
+        f"UPDATE pending_expenses SET processed = true WHERE id IN ({placeholders})",
+        tuple(int(i) for i in ids),
     )
-    resp.raise_for_status()
+    db.commit()
 
 
 def is_telegram_reply_configured() -> bool:
@@ -235,14 +108,7 @@ def is_telegram_reply_configured() -> bool:
 def send_message(chat_id, text):
     """
     Send a plain-text reply back into a Telegram chat via the Bot API.
-    Used to confirm a synced expense right in the same conversation,
-    showing the resulting today's-left / discretionary-left numbers.
-
-    Note this can only ever run when Ledger itself is running and synced
-    — Telegram delivers your message to the Cloudflare Worker instantly,
-    but the Worker has no access to salary/budget data (that only lives in
-    ledger.db on your machine), so this reply necessarily arrives at sync
-    time, not the instant you send the message.
+    Used to confirm a synced expense right in the same conversation.
 
     Never raises — a failed reply shouldn't undo an expense that's
     already been saved locally by the time this is called. Returns True/

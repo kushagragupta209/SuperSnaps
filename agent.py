@@ -19,6 +19,8 @@ import json
 import os
 import re
 
+import db_pg
+
 try:
     import requests
 except ImportError:  # requests is in requirements.txt; guard just in case
@@ -972,20 +974,39 @@ def evaluate_deal(item_name: str, target_price: float, monthly_savings: float):
 # Financial Database Chatbot (Text-to-SQL + Natural Language Reply)
 # --------------------------------------------------------------------------- #
 
-CHATBOT_SYSTEM_PROMPT = """You are an intelligent financial data assistant for the Ledger personal finance app.
-You have access to a local SQLite database with this schema:
+def _chatbot_system_prompt():
+    """
+    Built per-call (not a static constant) since the guidance on which SQL
+    functions are safe to use depends on whether Ledger is currently
+    running against local SQLite or Postgres (see db_pg.py) — strftime()
+    only exists in SQLite, and Postgres has no direct equivalent, so the
+    LLM needs to be told which dialect it's actually generating for.
+    """
+    if db_pg.is_postgres_configured():
+        dialect_note = (
+            "You are writing PostgreSQL. Use SUBSTR(col, 6, 2) to pull the month out of a "
+            "'YYYY-MM-DD' text column (e.g. SUBSTR(purchased_on, 6, 2) = '09' for September) — "
+            "do NOT use strftime(), which does not exist in PostgreSQL. EXTRACT() and TO_CHAR() "
+            "also work if you prefer them."
+        )
+    else:
+        dialect_note = "You are writing SQLite. strftime(), SUBSTR(), and LIKE are all available."
+
+    return f"""You are an intelligent financial data assistant for the Ledger personal finance app.
+You have access to a database with this schema:
 - purchases(id, name, price, purchased_on, created_at)
 - settings(key, value) [e.g. 'monthly_salary', 'savings_percent', 'profession', 'interests']
 - monthly_expenses(id, year, month, category, amount, raw_text, created_at)
 - wishlist(id, name, price, created_at)
 - day_expenses(id, date, merchant, category, amount, source, created_at)
 
-When the user asks a question, write a SINGLE valid SQLite SELECT query to fetch the necessary data.
+{dialect_note}
+
+When the user asks a question, write a SINGLE valid SELECT query to fetch the necessary data.
 Rules:
-- Respond with ONLY a JSON object: {"sql": "SELECT ..."}
+- Respond with ONLY a JSON object: {{"sql": "SELECT ..."}}
 - ONLY generate SELECT queries (NO INSERT, UPDATE, DELETE, DROP).
-- Use SQLite functions (e.g., SUM, AVG, COUNT, strftime, LIKE).
-- If the question does not require database querying, return {"sql": null, "direct_reply": "..."}
+- If the question does not require database querying, return {{"sql": null, "direct_reply": "..."}}
 - Never include any markdown fences or extra text outside JSON.
 """
 
@@ -1022,9 +1043,12 @@ def _chat_local_sql(user_message: str):
         day_date = " AND date LIKE ?"
         values.extend([f"{year:04d}-{month:02d}-%", year, month, f"{year:04d}-{month:02d}-%"])
     elif month:
-        purchase_date = " AND strftime('%m', purchased_on) = ?"
+        # SUBSTR (not strftime, which is SQLite-only) works identically
+        # whether Ledger is running on local SQLite or Postgres — both
+        # store these dates as plain 'YYYY-MM-DD' text.
+        purchase_date = " AND SUBSTR(purchased_on, 6, 2) = ?"
         fixed_date = " AND month = ?"
-        day_date = " AND strftime('%m', date) = ?"
+        day_date = " AND SUBSTR(date, 6, 2) = ?"
         values.extend([f"{month:02d}", month, f"{month:02d}"])
     elif "this month" in text:
         from datetime import date as _date
@@ -1050,7 +1074,7 @@ def _chat_local_sql(user_message: str):
         cat_values = [f"%{category}%", f"%{category}%", f"%{category}%"]
 
     if wants_average:
-        sql = f"SELECT ROUND(COALESCE(AVG(price), 0), 2) AS average_spending FROM purchases WHERE 1=1{purchase_date}{cat_purchase}"
+        sql = f"SELECT COALESCE(AVG(price), 0) AS average_spending FROM purchases WHERE 1=1{purchase_date}{cat_purchase}"
         vals = ([values[0]] if purchase_date else []) + ([cat_values[0]] if category else [])
     elif wants_count:
         sql = f"SELECT COUNT(*) AS count FROM purchases WHERE 1=1{purchase_date}{cat_purchase}"
@@ -1062,11 +1086,11 @@ def _chat_local_sql(user_message: str):
     elif wants_total:
         if category:
             sql = (
-                "SELECT ROUND("
+                "SELECT "
                 f"COALESCE((SELECT SUM(price) FROM purchases WHERE 1=1{purchase_date}{cat_purchase}),0) + "
                 f"COALESCE((SELECT SUM(amount) FROM monthly_expenses WHERE 1=1{fixed_date}{cat_fixed}),0) + "
                 f"COALESCE((SELECT SUM(amount) FROM day_expenses WHERE 1=1{day_date}{cat_day}),0)"
-                ", 2) AS total_spending"
+                " AS total_spending"
             )
             # Values occur in the SQL in date/filter order.
             vals = []
@@ -1078,11 +1102,11 @@ def _chat_local_sql(user_message: str):
             vals.append(cat_values[2])
         else:
             sql = (
-                "SELECT ROUND("
+                "SELECT "
                 f"COALESCE((SELECT SUM(price) FROM purchases WHERE 1=1{purchase_date}),0) + "
                 f"COALESCE((SELECT SUM(amount) FROM monthly_expenses WHERE 1=1{fixed_date}),0) + "
                 f"COALESCE((SELECT SUM(amount) FROM day_expenses WHERE 1=1{day_date}),0)"
-                ", 2) AS total_spending"
+                " AS total_spending"
             )
             vals = values.copy()
     else:
@@ -1108,7 +1132,7 @@ def generate_chat_sql(user_message: str):
                     "temperature": 0,
                     "response_format": {"type": "json_object"},
                     "messages": [
-                        {"role": "system", "content": CHATBOT_SYSTEM_PROMPT},
+                        {"role": "system", "content": _chatbot_system_prompt()},
                         {"role": "user", "content": user_message}
                     ],
                 },

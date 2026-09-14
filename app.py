@@ -27,6 +27,7 @@ import agent
 import flights
 import telegram_sync
 import sara
+import db_pg
 
 APP_DIR = Path(__file__).parent
 DB_PATH = APP_DIR / "ledger.db"
@@ -39,10 +40,20 @@ app = Flask(__name__)
 # --------------------------------------------------------------------------- #
 
 def get_db():
+    """
+    Local SQLite by default (zero setup). If DATABASE_URL is set (e.g.
+    deployed on Render, pointed at your Supabase Postgres project — the
+    same one already holding pending_expenses for Telegram sync), uses
+    that instead via db_pg.py, so the database survives Render's
+    ephemeral filesystem across restarts/redeploys.
+    """
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        if db_pg.is_postgres_configured():
+            g.db = db_pg.connect()
+        else:
+            g.db = sqlite3.connect(DB_PATH)
+            g.db.row_factory = sqlite3.Row
+            g.db.execute("PRAGMA foreign_keys = ON")
     return g.db
 
 
@@ -54,6 +65,13 @@ def close_db(exception=None):
 
 
 def init_db():
+    if db_pg.is_postgres_configured():
+        _init_db_postgres()
+    else:
+        _init_db_sqlite()
+
+
+def _init_db_sqlite():
     db = sqlite3.connect(DB_PATH)
     db.executescript(
         """
@@ -142,7 +160,7 @@ def init_db():
         );
         """
     )
-    # Lightweight migration for existing Super Snaps databases.
+    # Lightweight migration for existing Ledger databases.
     columns = {r[1] for r in db.execute("PRAGMA table_info(wishlist)").fetchall()}
     if "product_url" not in columns:
         db.execute("ALTER TABLE wishlist ADD COLUMN product_url TEXT")
@@ -150,6 +168,124 @@ def init_db():
         db.execute("ALTER TABLE wishlist ADD COLUMN platform TEXT")
     db.commit()
     db.close()
+
+
+def _init_db_postgres():
+    """
+    Same schema as _init_db_sqlite, translated to Postgres: SERIAL instead
+    of AUTOINCREMENT, inline REFERENCES instead of a trailing FOREIGN KEY
+    clause, and `ADD COLUMN IF NOT EXISTS` instead of SQLite's PRAGMA-based
+    introspection.
+
+    Also creates pending_expenses here — see telegram_sync.py — so this
+    single init_db() call sets up everything Telegram sync needs too, now
+    that it lives in the same database Ledger itself uses, instead of
+    being reached through a separate REST-only path.
+    """
+    db = db_pg.connect()
+    db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS purchases (
+            id           SERIAL PRIMARY KEY,
+            name         TEXT NOT NULL,
+            price        DOUBLE PRECISION NOT NULL,
+            purchased_on TEXT NOT NULL,
+            created_at   TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS monthly_expenses (
+            id         SERIAL PRIMARY KEY,
+            year       INTEGER NOT NULL,
+            month      INTEGER NOT NULL,
+            category   TEXT NOT NULL,
+            amount     DOUBLE PRECISION NOT NULL,
+            raw_text   TEXT,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS wishlist (
+            id          SERIAL PRIMARY KEY,
+            name        TEXT NOT NULL,
+            price       DOUBLE PRECISION NOT NULL,
+            created_at  TEXT NOT NULL,
+            product_url TEXT,
+            platform    TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS wishlist_price_history (
+            id          SERIAL PRIMARY KEY,
+            wishlist_id INTEGER NOT NULL REFERENCES wishlist(id) ON DELETE CASCADE,
+            price       DOUBLE PRECISION NOT NULL,
+            checked_at  TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS day_expenses (
+            id          SERIAL PRIMARY KEY,
+            date        TEXT NOT NULL,
+            merchant    TEXT,
+            category    TEXT NOT NULL,
+            amount      DOUBLE PRECISION NOT NULL,
+            source      TEXT,
+            created_at  TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS flights (
+            id             SERIAL PRIMARY KEY,
+            origin         TEXT NOT NULL,
+            destination    TEXT NOT NULL,
+            departure_date TEXT NOT NULL,
+            return_date    TEXT,
+            adults         INTEGER NOT NULL DEFAULT 1,
+            travel_class   TEXT NOT NULL DEFAULT 'ECONOMY',
+            target_price   DOUBLE PRECISION,
+            notify_email   TEXT,
+            current_price  DOUBLE PRECISION,
+            lowest_price   DOUBLE PRECISION,
+            active         INTEGER NOT NULL DEFAULT 1,
+            created_at     TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS flight_price_history (
+            id         SERIAL PRIMARY KEY,
+            flight_id  INTEGER NOT NULL REFERENCES flights(id) ON DELETE CASCADE,
+            price      DOUBLE PRECISION NOT NULL,
+            checked_at TEXT NOT NULL
+        );
+
+        -- Telegram's durable inbox (see telegram_sync.py) — written by the
+        -- Cloudflare Worker via Supabase's REST API, read here directly.
+        CREATE TABLE IF NOT EXISTS pending_expenses (
+            id                  SERIAL PRIMARY KEY,
+            chat_id             BIGINT NOT NULL,
+            raw_text            TEXT NOT NULL,
+            telegram_message_id BIGINT NOT NULL,
+            sent_at             TIMESTAMPTZ NOT NULL,
+            processed           BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_pending_expenses_unprocessed
+            ON pending_expenses (processed, sent_at);
+
+        ALTER TABLE wishlist ADD COLUMN IF NOT EXISTS product_url TEXT;
+        ALTER TABLE wishlist ADD COLUMN IF NOT EXISTS platform TEXT;
+        """
+    )
+    db.commit()
+    db.close()
+
+
+# Runs on both `python app.py` (local dev) and `gunicorn app:app` (Render/
+# production, which imports this module rather than executing it as
+# __main__ — calling init_db() only inside the old `if __name__ ==
+# "__main__":` block would mean gunicorn never creates the schema at
+# all). CREATE TABLE IF NOT EXISTS is idempotent, so re-running this on
+# every worker boot is safe.
+init_db()
 
 
 # --------------------------------------------------------------------------- #
@@ -972,17 +1108,17 @@ def sync_telegram_expenses():
     run — those can be days apart, since this only runs when Ledger is
     launched.
     """
+    db = get_db()
     try:
-        pending = telegram_sync.fetch_pending()
+        pending = telegram_sync.fetch_pending(db)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    except requests.RequestException:
-        return jsonify({"error": "Could not reach the Telegram inbox (Supabase). Try again shortly."}), 502
+    except Exception:  # noqa: BLE001 - covers psycopg2 connection/network failures too
+        return jsonify({"error": "Could not reach the Telegram inbox database. Try again shortly."}), 502
 
     if not pending:
         return jsonify({"items": [], "skipped": 0, "synced": 0})
 
-    db = get_db()
     saved = []
     skipped = 0
     processed_ids = []
@@ -1006,8 +1142,8 @@ def sync_telegram_expenses():
     db.commit()
 
     try:
-        telegram_sync.mark_processed(processed_ids)
-    except (ValueError, requests.RequestException):
+        telegram_sync.mark_processed(db, processed_ids)
+    except Exception:  # noqa: BLE001 - covers psycopg2 failures too
         # The local inserts above already succeeded and are committed, so
         # nothing's lost — but if this fails, the same messages will be
         # re-fetched (and re-inserted as duplicates) on the next sync.
@@ -1377,5 +1513,4 @@ def sara_chat():
 
 
 if __name__ == "__main__":
-    init_db()
     app.run(debug=True)
