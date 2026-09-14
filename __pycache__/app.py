@@ -26,6 +26,7 @@ from flask import Flask, g, jsonify, render_template, request
 import agent
 import flights
 import telegram_sync
+import sara
 
 APP_DIR = Path(__file__).parent
 DB_PATH = APP_DIR / "ledger.db"
@@ -1354,6 +1355,26 @@ def financial_chat():
         return jsonify({"reply": reply_text, "sql": sql, "data": results})
     except Exception as e:
         return jsonify({"reply": f"Encountered an issue running query: {str(e)}", "sql": sql, "data": []}), 500
+
+# --------------------------------------------------------------------------- #
+# Routes — API: Sara (supervisor agent)
+# --------------------------------------------------------------------------- #
+# Sara doesn't contain any business logic of her own — she calls the routes
+# above internally via app.test_client(), so every page's existing
+# validation and provider fallbacks are reused as-is. See sara.py for the
+# tool schema and orchestration loop.
+
+@app.route("/api/sara/chat", methods=["POST"])
+def sara_chat():
+    data = request.get_json(force=True)
+    message = (data.get("message") or "").strip()
+    history = data.get("history") or []
+    if not message:
+        return jsonify({"error": "Empty message."}), 400
+
+    result = sara.run_sara(message, app.test_client(), history)
+    return jsonify(result)
+
 
 if __name__ == "__main__":
     init_db()
