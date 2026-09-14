@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: ledger
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      # All secrets — set these manually in the Render dashboard after the
+      # first deploy (sync: false means Render won't try to auto-fill them).
+      # Never commit real values for any of these into this file or into git.
+      - key: DATABASE_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        sync: false
+      - key: SERPAPI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
