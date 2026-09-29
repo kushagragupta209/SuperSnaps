@@ -1512,5 +1512,63 @@ def sara_chat():
     return jsonify(result)
 
 
+@app.route("/api/telegram/sara", methods=["POST"])
+def telegram_sara():
+    """
+    Telegram-facing Sara endpoint.
+
+    The Cloudflare Worker authenticates itself with TELEGRAM_SARA_SECRET,
+    passes the Telegram chat id + message, and Sara runs with persistent
+    per-chat history stored in Postgres. This keeps Telegram as just another
+    interface to the same Sara supervisor used by the web app.
+    """
+    expected_secret = os.environ.get("TELEGRAM_SARA_SECRET")
+    if not expected_secret or request.headers.get("X-Telegram-Sara-Secret") != expected_secret:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(force=True)
+    message = (data.get("message") or "").strip()
+    chat_id = data.get("chat_id")
+    telegram_message_id = data.get("telegram_message_id")
+
+    if not message or chat_id is None:
+        return jsonify({"error": "message and chat_id are required."}), 400
+
+    db = get_db()
+    chat_id = int(chat_id)
+
+    # Reuse the same conversation format as the web client: user/assistant
+    # messages only. Keep the window bounded so prompts do not grow forever.
+    rows = db.execute(
+        "SELECT role, content FROM telegram_sara_messages "
+        "WHERE chat_id = ? ORDER BY id DESC LIMIT 12",
+        (chat_id,),
+    ).fetchall()
+    history = [dict(r) for r in reversed(rows)]
+
+    result = sara.run_sara(message, app.test_client(), history)
+
+    # Persist the turn after Sara has generated its response. The Telegram
+    # message id is retained for traceability/deduplication diagnostics.
+    reply = result.get("reply") or "Done."
+    db.execute(
+        "INSERT INTO telegram_sara_messages "
+        "(chat_id, telegram_message_id, role, content) VALUES (?, ?, ?, ?)",
+        (chat_id, telegram_message_id, "user", message),
+    )
+    db.execute(
+        "INSERT INTO telegram_sara_messages "
+        "(chat_id, telegram_message_id, role, content) VALUES (?, ?, ?, ?)",
+        (chat_id, telegram_message_id, "assistant", reply),
+    )
+    db.commit()
+
+    return jsonify({
+        "reply": reply,
+        "actions": result.get("actions", []),
+        "source": result.get("source"),
+    })
+
+
 if __name__ == "__main__":
     app.run(debug=True)
