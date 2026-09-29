@@ -245,9 +245,17 @@ arguments.
 Rules:
 - Resolve relative dates ("today", "yesterday", "next Friday") to YYYY-MM-DD
   yourself using today's date above. Never pass a relative date to a tool.
-- If a required detail is genuinely missing or ambiguous (e.g. no amount given,
-  an airport code you're not sure of), ask the user instead of guessing —
-  this is real money and real data.
+- Clarify before acting whenever you are confused, uncertain, or missing
+  information that materially changes the meaning or outcome of the request.
+  This includes missing amounts, item names, dates, categories, destinations,
+  airport codes, which record the user means, or whether the user wants to
+  record a purchase versus a wishlist item.
+- Never guess through ambiguity just to complete a tool call. If two or more
+  reasonable interpretations exist, ask one concise, natural clarifying
+  question and wait for the user's answer. Do not call a tool until the
+  ambiguity is resolved.
+- If the user's intent is clear and the required information is available,
+  act directly without unnecessary confirmation questions.
 - Tools named delete_* are destructive. Never pass confirmed=true unless the
   user has explicitly agreed to that specific deletion earlier in this
   conversation. If they haven't, call the tool with confirmed=false (or omit
@@ -257,6 +265,8 @@ Rules:
   ask_financial_question rather than trying to compute it yourself.
 - After calling tools, reply in plain, friendly language. Never mention SQL,
   JSON, tool names, status codes, or other internal details.
+- Keep replies concise and easy to scan. Use short paragraphs and bullets when
+  they improve readability.
 - If a tool result contains an "error" or a non-2xx status, explain the
   problem in plain language and suggest a fix; don't retry the same call
   with the same arguments.
@@ -311,7 +321,7 @@ def _execute_tool(client, name, args):
 # Public entry point
 # --------------------------------------------------------------------------- #
 
-def run_sara(message: str, client, history=None, max_iterations: int = 4):
+def run_sara(message: str, client, history=None, max_iterations: int = 4, channel: str = "web"):
     """
     Orchestrate one turn of the supervisor agent: send the message (plus any
     prior user/assistant turns in `history`) to Groq with the tool schema,
@@ -328,7 +338,21 @@ def run_sara(message: str, client, history=None, max_iterations: int = 4):
         }
 
     api_key = os.environ["GROQ_API_KEY"]
-    messages = [{"role": "system", "content": SARA_SYSTEM_PROMPT.format(today=date.today().isoformat())}]
+    prompt = SARA_SYSTEM_PROMPT.format(today=date.today().isoformat())
+    if channel == "telegram":
+        prompt += """
+
+Telegram presentation:
+- Write for a phone screen.
+- Prefer short sections, short paragraphs, and simple bullet points.
+- Use plain text with light emoji for hierarchy when useful (for example:
+  📊, 💰, ✅, ⚠️, 🤔). Do not overuse emojis.
+- Put the important result first.
+- For clarification questions, make the question unmistakable and offer
+  numbered choices when there are a few clear options.
+- Do not output Markdown tables, raw JSON, SQL, or debug information.
+"""
+    messages = [{"role": "system", "content": prompt}]
     messages.extend(history or [])
     messages.append({"role": "user", "content": message})
 
