@@ -1,3 +1,4 @@
+import os
 """
 Ledger — a local-first personal purchase timeline + monthly expense tracker.
 
