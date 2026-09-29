@@ -21,3 +21,21 @@ create index if not exists idx_pending_expenses_unprocessed
 -- (used server-side by the Worker and by Ledger) can read/write — never
 -- expose the anon/public key for this table.
 alter table pending_expenses enable row level security;
+
+
+-- Persistent Sara conversation history for Telegram.
+-- One chat can have many turns; keeping only the latest 12 messages in
+-- the application prompt prevents the context from growing indefinitely.
+create table if not exists telegram_sara_messages (
+    id                    bigint generated always as identity primary key,
+    chat_id               bigint not null,
+    telegram_message_id   bigint,
+    role                  text not null check (role in ('user', 'assistant')),
+    content               text not null,
+    created_at             timestamptz not null default now()
+);
+
+create index if not exists idx_telegram_sara_messages_chat
+    on telegram_sara_messages (chat_id, id);
+
+alter table telegram_sara_messages enable row level security;
