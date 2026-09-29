@@ -19,3 +19,20 @@ services:
         sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+
+  - type: cron
+    name: flight-price-daily-check
+    runtime: python
+    plan: free
+    schedule: "0 4 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python flight_price_cron.py
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SERPAPI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_ALLOWED_CHAT_ID
+        sync: false
