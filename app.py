@@ -1601,7 +1601,7 @@ def telegram_sara():
     ).fetchall()
     history = [dict(r) for r in reversed(rows)]
 
-    result = sara.run_sara(message, app.test_client(), history, channel="telegram")
+    result = sara.run_sara(message, app.test_client(), history, channel="telegram", telegram_chat_id=chat_id)
 
     # Persist the turn after Sara has generated its response. The Telegram
     # message id is retained for traceability/deduplication diagnostics.
