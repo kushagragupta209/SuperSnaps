@@ -167,6 +167,11 @@ def _init_db_sqlite():
         db.execute("ALTER TABLE wishlist ADD COLUMN product_url TEXT")
     if "platform" not in columns:
         db.execute("ALTER TABLE wishlist ADD COLUMN platform TEXT")
+    flight_columns = {r[1] for r in db.execute("PRAGMA table_info(flights)").fetchall()}
+    if "telegram_chat_id" not in flight_columns:
+        db.execute("ALTER TABLE flights ADD COLUMN telegram_chat_id INTEGER")
+    if "notify_telegram" not in flight_columns:
+        db.execute("ALTER TABLE flights ADD COLUMN notify_telegram INTEGER NOT NULL DEFAULT 1")
     db.commit()
     db.close()
 
@@ -274,6 +279,8 @@ def _init_db_postgres():
 
         ALTER TABLE wishlist ADD COLUMN IF NOT EXISTS product_url TEXT;
         ALTER TABLE wishlist ADD COLUMN IF NOT EXISTS platform TEXT;
+        ALTER TABLE flights ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT;
+        ALTER TABLE flights ADD COLUMN IF NOT EXISTS notify_telegram BOOLEAN NOT NULL DEFAULT TRUE;
         """
     )
     db.commit()
@@ -886,6 +893,15 @@ def add_flight():
     return_date = (data.get("return_date") or "").strip() or None
     travel_class = (data.get("travel_class") or "ECONOMY").strip().upper()
     notify_email = (data.get("notify_email") or "").strip() or None
+    telegram_chat_id = data.get("telegram_chat_id")
+    if telegram_chat_id not in (None, ""):
+        try:
+            telegram_chat_id = int(telegram_chat_id)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Telegram chat id must be a valid integer."}), 400
+    else:
+        telegram_chat_id = None
+    notify_telegram = bool(data.get("notify_telegram", True))
 
     if len(origin) != 3 or not origin.isalpha():
         return jsonify({"error": "Origin must be a 3-letter airport code."}), 400
@@ -915,10 +931,11 @@ def add_flight():
     cur = db.execute(
         """INSERT INTO flights
                (origin, destination, departure_date, return_date, adults, travel_class,
-                target_price, notify_email, current_price, lowest_price, active, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 1, ?)""",
+                target_price, notify_email, telegram_chat_id, notify_telegram,
+                current_price, lowest_price, active, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 1, ?)""",
         (origin, destination, departure_date, return_date, adults, travel_class,
-         target_price, notify_email, now),
+         target_price, notify_email, telegram_chat_id, notify_telegram, now),
     )
     flight_id = cur.lastrowid
     db.commit()
