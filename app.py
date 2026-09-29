@@ -952,6 +952,43 @@ def add_flight():
     return jsonify(row), 201
 
 
+@app.route("/api/flights/check-by-details", methods=["POST"])
+def check_flight_fare_by_details():
+    """Resolve a saved tracker by route/date details, keeping its internal id hidden from Sara's user-facing flow."""
+    data = request.get_json(force=True)
+    origin = (data.get("origin") or "").strip().upper()
+    destination = (data.get("destination") or "").strip().upper()
+    departure_date = (data.get("departure_date") or "").strip()
+    return_date = (data.get("return_date") or "").strip() or None
+
+    if len(origin) != 3 or not origin.isalpha():
+        return jsonify({"error": "Origin must be a 3-letter airport code."}), 400
+    if len(destination) != 3 or not destination.isalpha():
+        return jsonify({"error": "Destination must be a 3-letter airport code."}), 400
+    if not departure_date:
+        return jsonify({"error": "Departure date is required."}), 400
+
+    db = get_db()
+    if return_date:
+        row = db.execute(
+            "SELECT * FROM flights WHERE origin = ? AND destination = ? "
+            "AND departure_date = ? AND (return_date = ? OR (return_date IS NULL AND ? = '')) "
+            "AND active = 1 ORDER BY created_at DESC LIMIT 1",
+            (origin, destination, departure_date, return_date, return_date),
+        ).fetchone()
+    else:
+        row = db.execute(
+            "SELECT * FROM flights WHERE origin = ? AND destination = ? "
+            "AND departure_date = ? AND active = 1 ORDER BY created_at DESC LIMIT 1",
+            (origin, destination, departure_date),
+        ).fetchone()
+
+    if not row:
+        return jsonify({"error": "No active flight tracker matches that route and date."}), 404
+
+    return check_flight_fare(row["id"])
+
+
 @app.route("/api/flights/<int:flight_id>/check", methods=["POST"])
 def check_flight_fare(flight_id):
     db = get_db()
