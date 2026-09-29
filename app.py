@@ -933,7 +933,7 @@ def add_flight():
                (origin, destination, departure_date, return_date, adults, travel_class,
                 target_price, notify_email, telegram_chat_id, notify_telegram,
                 current_price, lowest_price, active, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 1, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 1, ?)""",
         (origin, destination, departure_date, return_date, adults, travel_class,
          target_price, notify_email, telegram_chat_id, notify_telegram, now),
     )
