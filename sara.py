@@ -61,6 +61,7 @@ TOOL_SPECS = {
     "search_flights":          {"method": "POST",   "path": "/api/flights/search"},
     "add_flight_tracker":      {"method": "POST",   "path": "/api/flights"},
     "check_flight_fare":       {"method": "POST",   "path": "/api/flights/{flight_id}/check"},
+    "list_flight_trackers":    {"method": "GET",    "path": "/api/flights"},
     "delete_flight_tracker":   {"method": "DELETE", "path": "/api/flights/{flight_id}", "confirm": True},
     "get_insights":            {"method": "GET",    "path": "/api/insights"},
     "get_safe_to_spend":       {"method": "GET",    "path": "/api/budget/safe-to-spend"},
