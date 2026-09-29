@@ -184,6 +184,7 @@ TOOLS = [
             "adults": {"type": "integer"},
             "travel_class": {"type": "string", "enum": ["ECONOMY", "PREMIUM_ECONOMY", "BUSINESS", "FIRST"]},
             "target_price": {"type": "number"}, "notify_email": {"type": "string"},
+            "notify_telegram": {"type": "boolean", "description": "Enable daily Telegram fare updates when this tracker is created."},
         }, "required": ["origin", "destination", "departure_date"]},
     }},
     {"type": "function", "function": {
@@ -281,6 +282,9 @@ Rules:
   then call check_flight_tracker with the route/date details. If exactly one
   tracker matches the request, check it directly.
 - Never expose internal database/tracker IDs to the user.
+- When creating a flight tracker from Telegram, enable Telegram notifications by
+  default. The Telegram chat is attached automatically by the app; never ask
+  the user for a chat ID.
 - Tools named delete_* are destructive. Never pass confirmed=true unless the
   user has explicitly agreed to that specific deletion earlier in this
   conversation. If they haven't, call the tool with confirmed=false (or omit
@@ -302,13 +306,17 @@ Rules:
 # Tool execution
 # --------------------------------------------------------------------------- #
 
-def _execute_tool(client, name, args):
+def _execute_tool(client, name, args, telegram_chat_id=None):
     """Run one tool call against the Flask app's own routes via test_client()."""
     spec = TOOL_SPECS.get(name)
     if not spec:
         return {"error": f"Unknown tool '{name}'."}
 
     args = dict(args or {})
+
+    if name == "add_flight_tracker" and telegram_chat_id is not None:
+        args["telegram_chat_id"] = telegram_chat_id
+        args.setdefault("notify_telegram", True)
 
     if spec.get("confirm") and not args.pop("confirmed", False):
         return {
@@ -346,7 +354,7 @@ def _execute_tool(client, name, args):
 # Public entry point
 # --------------------------------------------------------------------------- #
 
-def run_sara(message: str, client, history=None, max_iterations: int = 4, channel: str = "web"):
+def run_sara(message: str, client, history=None, max_iterations: int = 4, channel: str = "web", telegram_chat_id=None):
     """
     Orchestrate one turn of the supervisor agent: send the message (plus any
     prior user/assistant turns in `history`) to Groq with the tool schema,
@@ -411,7 +419,7 @@ Telegram presentation:
                 except json.JSONDecodeError:
                     fn_args = {}
 
-                result = _execute_tool(client, fn_name, fn_args)
+                result = _execute_tool(client, fn_name, fn_args, telegram_chat_id=telegram_chat_id)
                 actions.append({
                     "tool": fn_name,
                     "args": {k: v for k, v in fn_args.items() if k != "confirmed"},
