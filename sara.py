@@ -187,6 +187,21 @@ TOOLS = [
         }, "required": ["origin", "destination", "departure_date"]},
     }},
     {"type": "function", "function": {
+        "name": "list_flight_trackers",
+        "description": "List the user's saved flight fare trackers so Sara can show them as human-readable choices. Never ask the user for an internal tracker ID when they ask to check a tracker.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "check_flight_tracker",
+        "description": "Check a saved flight fare tracker by human-readable route/date details. Use this after resolving a user's choice such as '1' from the tracker list; the user should never need to provide the internal tracker ID.",
+        "parameters": {"type": "object", "properties": {
+            "origin": {"type": "string", "description": "3-letter origin airport code."},
+            "destination": {"type": "string", "description": "3-letter destination airport code."},
+            "departure_date": {"type": "string", "description": "YYYY-MM-DD."},
+            "return_date": {"type": "string", "description": "YYYY-MM-DD if the tracker is round-trip."},
+        }, "required": ["origin", "destination", "departure_date"]},
+    }},
+    {"type": "function", "function": {
         "name": "check_flight_fare",
         "description": "Re-check the current fare for an existing flight tracker by id.",
         "parameters": {"type": "object", "properties": {
@@ -256,6 +271,16 @@ Rules:
   ambiguity is resolved.
 - If the user's intent is clear and the required information is available,
   act directly without unnecessary confirmation questions.
+- For flight tracker requests, never ask the user to provide an internal tracker ID.
+  If they ask to check "my flight tracker" without identifying which one,
+  call list_flight_trackers first. If multiple trackers exist, show concise
+  numbered choices using route, departure date, return date when relevant,
+  and flight/traveller details when useful. Ask the user to choose a number.
+  If the user then replies with a number or a route description, use the
+  prior assistant list and the current conversation to resolve that choice,
+  then call check_flight_tracker with the route/date details. If exactly one
+  tracker matches the request, check it directly.
+- Never expose internal database/tracker IDs to the user.
 - Tools named delete_* are destructive. Never pass confirmed=true unless the
   user has explicitly agreed to that specific deletion earlier in this
   conversation. If they haven't, call the tool with confirmed=false (or omit
