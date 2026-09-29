@@ -21,6 +21,61 @@
  * be migrated/processed if needed.
  */
 
+function formatTelegramHtml(text) {
+  // Sara is instructed to keep Telegram replies simple. Convert the small
+  // amount of Markdown she may still produce into Telegram-safe HTML.
+  let value = String(text || "").replace(/\\r\\n/g, "\\n").trim();
+  value = value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  value = value.replace(/^#{1,3}\\s*(.+)$/gm, "<b>$1</b>");
+  value = value.replace(/\\*\\*(.+?)\\*\\*/g, "<b>$1</b>");
+  value = value.replace(/__([^_]+?)__/g, "<b>$1</b>");
+  value = value.replace(/\\`([^\\`]+?)\\`/g, "<code>$1</code>");
+  value = value.replace(/^[ \\t]*[-*]\\s+/gm, "• ");
+  value = value.replace(/^\\s*\\d+[.)]\\s+/gm, (match) => match.trimStart());
+
+  return value || "Done.";
+}
+
+async function sendTelegramReply(env, chatId, text) {
+  const formatted = formatTelegramHtml(text);
+
+  // Telegram limits a text message to 4096 characters. Keep chunks comfortably
+  // below the limit so formatted replies remain reliable.
+  const chunks = [];
+  for (let i = 0; i < formatted.length; i += 3800) {
+    chunks.push(formatted.slice(i, i + 3800));
+  }
+
+  for (const chunk of chunks) {
+    const telegramResponse = await fetch(
+      `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: chunk,
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+        }),
+      }
+    );
+
+    if (!telegramResponse.ok) {
+      console.error(
+        "Telegram sendMessage failed:",
+        telegramResponse.status,
+        await telegramResponse.text()
+      );
+      return;
+    }
+  }
+}
+
 async function processUpdate(update, env) {
   const message = update && update.message;
   const text = message && message.text;
@@ -50,22 +105,7 @@ async function processUpdate(update, env) {
 
   const result = await saraResponse.json();
   const reply = result.reply || "I couldn't generate a response right now.";
-
-  const telegramResponse = await fetch(
-    `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
-    {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: reply,
-      }),
-    }
-  );
-
-  if (!telegramResponse.ok) {
-    console.error("Telegram sendMessage failed:", telegramResponse.status, await telegramResponse.text());
-  }
+  await sendTelegramReply(env, chatId, reply);
 }
 
 export default {
