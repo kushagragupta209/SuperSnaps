@@ -563,7 +563,7 @@ def _month_spend(db, year, month, user_id):
     month_prefix = f"{year:04d}-{month:02d}"
     purchases_total = db.execute(
         "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
-        (f"{month_prefix}%", user_id),
+        (f"{month_prefix}%", user["id"]),
     ).fetchone()["s"]
     fixed_rows = db.execute(
         "SELECT category, amount FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ? ORDER BY amount DESC",
@@ -703,7 +703,7 @@ def list_wishlist():
     ).fetchall()
     items = [dict(r) for r in rows]
 
-    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user_id,)).fetchone()
+    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user["id"],)).fetchone()
     salary = float(salary_row["value"]) if salary_row else None
 
     today = date.today()
@@ -746,6 +746,7 @@ def list_wishlist():
 
 @app.route("/api/wishlist", methods=["POST"])
 def add_wishlist():
+    user = require_user()
     data = request.get_json(force=True)
     name = (data.get("name") or "").strip()
     price = data.get("price")
@@ -763,8 +764,8 @@ def add_wishlist():
 
     db = get_db()
     cur = db.execute(
-        "INSERT INTO wishlist (name, price, created_at, product_url, platform) VALUES (?, ?, ?, ?, ?)",
-        (name, price, datetime.utcnow().isoformat(), product_url, platform),
+        "INSERT INTO wishlist (name, price, created_at, product_url, platform, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+        (name, price, datetime.utcnow().isoformat(), product_url, platform, user["id"]),
     )
     item_id = cur.lastrowid
     db.execute(
@@ -772,7 +773,7 @@ def add_wishlist():
         (item_id, price, datetime.utcnow().isoformat()),
     )
     db.commit()
-    new_row = db.execute("SELECT * FROM wishlist WHERE id = ?", (item_id,)).fetchone()
+    new_row = db.execute("SELECT * FROM wishlist WHERE id = ? AND user_id = ?", (item_id, user["id"])).fetchone()
     return jsonify(dict(new_row)), 201
 
 
@@ -869,6 +870,7 @@ def _fetch_product(url):
 
 @app.route("/api/wishlist/import", methods=["POST"])
 def import_wishlist_product():
+    user = require_user()
     data = request.get_json(force=True)
     url = (data.get("url") or "").strip()
     if not url:
@@ -890,24 +892,25 @@ def import_wishlist_product():
         return jsonify({"error": str(exc)}), 400
 
     db = get_db()
-    existing = db.execute("SELECT id FROM wishlist WHERE product_url = ?", (url,)).fetchone()
+    existing = db.execute("SELECT id FROM wishlist WHERE product_url = ? AND user_id = ?", (url, user["id"])).fetchone()
     if existing:
         item_id = existing["id"]
         db.execute("UPDATE wishlist SET name = ?, price = ?, platform = ? WHERE id = ?", (product["name"], product["price"], product["platform"], item_id))
     else:
         cur = db.execute(
-            "INSERT INTO wishlist (name, price, created_at, product_url, platform) VALUES (?, ?, ?, ?, ?)",
-            (product["name"], product["price"], datetime.utcnow().isoformat(), url, product["platform"]),
+            "INSERT INTO wishlist (name, price, created_at, product_url, platform, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (product["name"], product["price"], datetime.utcnow().isoformat(), url, product["platform"], user["id"]),
         )
         item_id = cur.lastrowid
     db.execute("INSERT INTO wishlist_price_history (wishlist_id, price, checked_at) VALUES (?, ?, ?)", (item_id, product["price"], datetime.utcnow().isoformat()))
     db.commit()
-    row = db.execute("SELECT * FROM wishlist WHERE id = ?", (item_id,)).fetchone()
+    row = db.execute("SELECT * FROM wishlist WHERE id = ?", (item_id, user["id"])).fetchone()
     return jsonify(dict(row)), 201
 
 
 @app.route("/api/wishlist/<int:item_id>/history", methods=["GET"])
 def wishlist_price_history(item_id):
+    user = require_user()
     db = get_db()
     item = db.execute("SELECT * FROM wishlist WHERE id = ?", (item_id,)).fetchone()
     if not item:
@@ -918,6 +921,7 @@ def wishlist_price_history(item_id):
 
 @app.route("/api/wishlist/<int:item_id>/refresh", methods=["POST"])
 def refresh_wishlist_price(item_id):
+    user = require_user()
     db = get_db()
     item = db.execute("SELECT * FROM wishlist WHERE id = ?", (item_id,)).fetchone()
     if not item:
@@ -944,6 +948,7 @@ def refresh_wishlist_price(item_id):
 
 @app.route("/api/wishlist/<int:item_id>/manual-price", methods=["POST"])
 def manual_wishlist_price(item_id):
+    user = require_user()
     data = request.get_json(force=True)
     try:
         price = float(data.get("price"))
@@ -964,8 +969,9 @@ def manual_wishlist_price(item_id):
 
 @app.route("/api/wishlist/<int:item_id>", methods=["DELETE"])
 def delete_wishlist(item_id):
+    user = require_user()
     db = get_db()
-    db.execute("DELETE FROM wishlist WHERE id = ?", (item_id,))
+    db.execute("DELETE FROM wishlist WHERE id = ? AND user_id = ?", (item_id, user["id"]))
     db.commit()
     return jsonify({"deleted": item_id})
 
