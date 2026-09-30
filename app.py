@@ -435,7 +435,7 @@ def index():
 def list_purchases():
     db = get_db()
     rows = db.execute(
-        "SELECT * FROM purchases ORDER BY purchased_on DESC, id DESC"
+        "SELECT * FROM purchases WHERE user_id = ? ORDER BY purchased_on DESC, id DESC"
     ).fetchall()
     return jsonify([dict(r) for r in rows])
 
@@ -462,14 +462,14 @@ def add_purchase():
         (name, price, purchased_on, datetime.utcnow().isoformat()),
     )
     db.commit()
-    new_row = db.execute("SELECT * FROM purchases WHERE id = ?", (cur.lastrowid,)).fetchone()
+    new_row = db.execute("SELECT * FROM purchases WHERE id = ? AND user_id = ?", (cur.lastrowid, user["id"])).fetchone()
     return jsonify(dict(new_row)), 201
 
 
 @app.route("/api/purchases/<int:purchase_id>", methods=["DELETE"])
 def delete_purchase(purchase_id):
     db = get_db()
-    db.execute("DELETE FROM purchases WHERE id = ?", (purchase_id,))
+    db.execute("DELETE FROM purchases WHERE id = ? AND user_id = ?", (purchase_id, user["id"]))
     db.commit()
     return jsonify({"deleted": purchase_id})
 
@@ -1310,9 +1310,9 @@ def save_day_expenses():
         cur = db.execute(
             "INSERT INTO day_expenses (date, merchant, category, amount, source, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (date_str, merchant, category, amount, source, datetime.utcnow().isoformat()),
+            (date_str, merchant, category, amount, source, datetime.utcnow().isoformat(), user["id"]),
         )
-        row = db.execute("SELECT * FROM day_expenses WHERE id = ?", (cur.lastrowid,)).fetchone()
+        row = db.execute("SELECT * FROM day_expenses WHERE id = ? AND user_id = ?", (cur.lastrowid, user["id"])).fetchone()
         saved.append(dict(row))
     db.commit()
 
@@ -1374,7 +1374,7 @@ def list_day_expenses():
 @app.route("/api/day-expenses/<int:item_id>", methods=["DELETE"])
 def delete_day_expense(item_id):
     db = get_db()
-    db.execute("DELETE FROM day_expenses WHERE id = ?", (item_id,))
+    db.execute("DELETE FROM day_expenses WHERE id = ? AND user_id = ?", (item_id, user["id"]))
     db.commit()
     return jsonify({"deleted": item_id})
 
