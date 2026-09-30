@@ -312,6 +312,19 @@ init_db()
 # Routes — authentication / multi-user foundation
 # --------------------------------------------------------------------------- #
 
+@app.before_request
+def enforce_api_auth():
+    """Block financial APIs unless a valid Supabase session is present."""
+    if not request.path.startswith("/api/"):
+        return None
+    public = {"/api/auth/config", "/api/auth/me"}
+    if request.path in public:
+        return None
+    if not auth.get_user_from_token(auth.get_bearer_token(request)):
+        return jsonify({"error": "Authentication required."}), 401
+    return None
+
+
 @app.route("/api/auth/config", methods=["GET"])
 def auth_config():
     # The anon/publishable key is intentionally safe to expose to the browser.
