@@ -12,3 +12,5 @@ psycopg2-binary==2.9.9
 # Production WSGI server — used on Render (see render.yaml); not needed
 # for local `python app.py`, which uses Flask's built-in dev server.
 gunicorn==22.0.0
+# Load local .env values when running Flask directly.
+python-dotenv==1.0.1
