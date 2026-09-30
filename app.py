@@ -1067,6 +1067,86 @@ def delete_flight(flight_id):
     return jsonify({"deleted": flight_id})
 
 
+def _expense_budget_snapshot(db, expense_date=None):
+    """Return the current discretionary budget and category-spend snapshot."""
+    expense_date = expense_date or date.today().isoformat()
+    try:
+        expense_day = datetime.strptime(expense_date, "%Y-%m-%d").date()
+    except ValueError:
+        expense_day = date.today()
+
+    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary'").fetchone()
+    salary = float(salary_row["value"]) if salary_row else None
+    savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent'").fetchone()
+    savings_pct = float(savings_row["value"]) if savings_row else agent.DEFAULT_SAVINGS_PERCENT
+
+    month_prefix = f"{expense_day.year:04d}-{expense_day.month:02d}"
+    purchases_total = db.execute(
+        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ?",
+        (f"{month_prefix}%",),
+    ).fetchone()["s"]
+    fixed_total = db.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS s FROM monthly_expenses WHERE year = ? AND month = ?",
+        (expense_day.year, expense_day.month),
+    ).fetchone()["s"]
+    day_spend_total = db.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS s FROM day_expenses WHERE date LIKE ?",
+        (f"{month_prefix}%",),
+    ).fetchone()["s"]
+
+    discretionary_spent = float(purchases_total or 0) + float(day_spend_total or 0)
+
+    _, total_days = calendar.monthrange(expense_day.year, expense_day.month)
+    days_remaining = max(1, total_days - expense_day.day + 1)
+
+    snapshot = {
+        "configured": bool(salary),
+        "currency": "INR",
+        "today": expense_day.isoformat(),
+        "monthly_spent": round(discretionary_spent, 2),
+    }
+
+    if salary:
+        savings_target = float(salary) * (savings_pct / 100.0)
+        monthly_pool = max(0.0, float(salary) - float(fixed_total or 0) - savings_target)
+        monthly_left = round(monthly_pool - discretionary_spent, 2)
+
+        today_purchases = db.execute(
+            "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on = ?",
+            (expense_day.isoformat(),),
+        ).fetchone()["s"]
+        today_day_expenses = db.execute(
+            "SELECT COALESCE(SUM(amount), 0) AS s FROM day_expenses WHERE date = ?",
+            (expense_day.isoformat(),),
+        ).fetchone()["s"]
+        spent_today = float(today_purchases or 0) + float(today_day_expenses or 0)
+
+        daily_budget = round(max(0.0, monthly_left) / days_remaining, 2)
+        snapshot.update({
+            "daily_safe_budget": daily_budget,
+            "spent_today": round(spent_today, 2),
+            "today_left": round(daily_budget - spent_today, 2),
+            "monthly_left": monthly_left,
+            "days_remaining": days_remaining,
+        })
+
+    categories = db.execute(
+        "SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') AS category, "
+        "COALESCE(SUM(amount), 0) AS amount "
+        "FROM day_expenses WHERE date LIKE ? "
+        "GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') "
+        "ORDER BY amount DESC",
+        (f"{month_prefix}%",),
+    ).fetchall()
+    category_totals = [
+        {"category": row["category"], "amount": round(float(row["amount"] or 0), 2)}
+        for row in categories
+    ]
+    snapshot["top_category"] = category_totals[0] if category_totals else None
+    snapshot["category_breakdown"] = category_totals[:5]
+    return snapshot
+
+
 # --------------------------------------------------------------------------- #
 # Routes — API: day-wise expenses (manual entry + Telegram sync)
 # --------------------------------------------------------------------------- #
@@ -1117,7 +1197,8 @@ def save_day_expenses():
     if not saved:
         return jsonify({"error": "No valid items with a resolved date (YYYY-MM-DD) and amount were provided."}), 400
 
-    return jsonify({"items": saved, "skipped": skipped}), 201
+    snapshot = _expense_budget_snapshot(db, saved[-1]["date"])
+    return jsonify({"items": saved, "skipped": skipped, "budget": snapshot}), 201
 
 
 @app.route("/api/day-expenses", methods=["GET"])
@@ -1196,6 +1277,8 @@ def sync_telegram_expenses():
 
     db.commit()
 
+    budget = _expense_budget_snapshot(db, saved[-1]["date"]) if saved else _expense_budget_snapshot(db)
+
     try:
         telegram_sync.mark_processed(db, processed_ids)
     except Exception:  # noqa: BLE001 - covers psycopg2 failures too
@@ -1204,12 +1287,12 @@ def sync_telegram_expenses():
         # re-fetched (and re-inserted as duplicates) on the next sync.
         # Surface it rather than pretending everything's clean.
         return jsonify({
-            "items": saved, "skipped": skipped, "synced": len(saved),
+            "items": saved, "skipped": skipped, "synced": len(saved), "budget": budget,
             "warning": "Saved locally, but couldn't mark messages as processed in the inbox — "
                        "they may be synced again next time.",
         })
 
-    return jsonify({"items": saved, "skipped": skipped, "synced": len(saved)})
+    return jsonify({"items": saved, "skipped": skipped, "synced": len(saved), "budget": budget})
 
 
 # --------------------------------------------------------------------------- #
