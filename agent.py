@@ -179,6 +179,47 @@ def _parse_expense_llm(text: str):
         return None
 
 
+def _classify_day_expense_llm(text: str):
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key or requests is None:
+        return None
+    categories = ", ".join(DAY_EXPENSE_CATEGORIES)
+    prompt = (
+        "Classify this personal expense into exactly ONE category.\n"
+        "Allowed categories ONLY: " + categories + "\n\n"
+        "Infer what was actually purchased, not just the merchant name. "
+        "Nutritious food -> Healthy Food. Restaurant, fast food, snacks, "
+        "desserts, delivery, cafe meals -> Unhealthy Food / Eating Out. "
+        "Home food supplies -> Groceries. Fuel, cab, metro, bus, parking, "
+        "tolls -> Transport. Return ONLY JSON with category.\n\n" + text
+    )
+    try:
+        response = requests.post(
+            GROQ_API_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": GROQ_MODEL, "temperature": 0, "response_format": {"type": "json_object"},
+                  "messages": [{"role": "system", "content": prompt}]},
+            timeout=10,
+        )
+        response.raise_for_status()
+        raw = response.json()["choices"][0]["message"]["content"].strip()
+        data = json.loads(re.sub(r"^```(json)?|```$", "", raw, flags=re.MULTILINE).strip())
+        category = str(data.get("category", "")).strip()
+        return category if category in DAY_EXPENSE_CATEGORIES else None
+    except Exception:
+        return None
+
+
+def classify_day_expense(text: str) -> str:
+    llm_category = _classify_day_expense_llm(text)
+    if llm_category:
+        return llm_category
+    lowered = text.lower()
+    for label, words in DAY_EXPENSE_CATEGORY_KEYWORDS.items():
+        if any(w in lowered for w in words):
+            return label
+    return "Other"
+
 # --------------------------------------------------------------------------- #
 # Public entry point
 # --------------------------------------------------------------------------- #
@@ -349,11 +390,7 @@ def parse_day_expense(text: str, reference_date=None):
         # "today", or no date word at all -> the day the message was sent
         resolved_date = ref
 
-    category = "Other"
-    for label, words in DAY_EXPENSE_CATEGORY_KEYWORDS.items():
-        if any(w in lowered for w in words):
-            category = label
-            break
+    category = classify_day_expense(text)
 
     merchant = None
     merchant_match = re.search(
