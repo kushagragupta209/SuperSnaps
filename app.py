@@ -676,6 +676,7 @@ def recommendations():
 
 @app.route("/api/wishlist", methods=["GET"])
 def list_wishlist():
+    user = require_user()
     """
     Returns each wishlist item alongside a savings projection: how much is
     being saved per month right now (salary minus this month's fixed
@@ -684,7 +685,7 @@ def list_wishlist():
     """
     db = get_db()
     rows = db.execute(
-        "SELECT * FROM wishlist ORDER BY price ASC, id ASC"
+        "SELECT * FROM wishlist WHERE user_id = ? ORDER BY price ASC, id ASC"
     ).fetchall()
     items = [dict(r) for r in rows]
 
