@@ -484,7 +484,7 @@ def delete_purchase(purchase_id):
 @app.route("/api/settings/salary", methods=["GET"])
 def get_salary():
     db = get_db()
-    row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary'").fetchone()
+    row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user["id"],)).fetchone()
     return jsonify({"monthly_salary": float(row["value"]) if row else None})
 
 
@@ -551,8 +551,8 @@ def _month_spend(db, year, month):
     """Returns (purchases_total, fixed_total, fixed_rows) for one (year, month)."""
     month_prefix = f"{year:04d}-{month:02d}"
     purchases_total = db.execute(
-        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ?",
-        (f"{month_prefix}%",),
+        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
+        (f"{month_prefix}%", user["id"]),,
     ).fetchone()["s"]
     fixed_rows = db.execute(
         "SELECT category, amount FROM monthly_expenses WHERE year = ? AND month = ? ORDER BY amount DESC",
@@ -685,7 +685,7 @@ def list_wishlist():
     """
     db = get_db()
     rows = db.execute(
-        "SELECT * FROM wishlist WHERE user_id = ? ORDER BY price ASC, id ASC"
+        "SELECT * FROM wishlist WHERE user_id = ? ORDER BY price ASC, id ASC", (user["id"],)
     ).fetchall()
     items = [dict(r) for r in rows]
 
@@ -699,8 +699,8 @@ def list_wishlist():
         (f"{month_prefix}%",),
     ).fetchone()["s"]
     fixed_total = db.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS s FROM monthly_expenses WHERE year = ? AND month = ?",
-        (today.year, today.month),
+        "SELECT COALESCE(SUM(amount), 0) AS s FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ?",
+        (today.year, today.month, user["id"]),
     ).fetchone()["s"]
 
     monthly_savings = None
