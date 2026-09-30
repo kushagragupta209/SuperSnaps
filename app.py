@@ -1201,6 +1201,32 @@ def save_day_expenses():
     return jsonify({"items": saved, "skipped": skipped, "budget": snapshot}), 201
 
 
+@app.route("/api/day-expenses/categories", methods=["GET"])
+def day_expense_categories():
+    year = request.args.get("year", type=int, default=date.today().year)
+    month = request.args.get("month", type=int, default=date.today().month)
+    month_prefix = f"{year:04d}-{month:02d}"
+
+    db = get_db()
+    rows = db.execute(
+        "SELECT category, COALESCE(SUM(amount), 0) AS amount "
+        "FROM day_expenses WHERE date LIKE ? "
+        "GROUP BY category ORDER BY amount DESC",
+        (f"{month_prefix}%",),
+    ).fetchall()
+    totals = {row["category"]: round(float(row["amount"] or 0), 2) for row in rows}
+    categories = getattr(agent, "DAY_EXPENSE_CATEGORIES", ["Other"])
+    return jsonify({
+        "year": year,
+        "month": month,
+        "categories": [{"category": cat, "amount": totals.get(cat, 0)} for cat in categories],
+        "top_category": next(
+            ({"category": cat, "amount": totals[cat]} for cat in categories if totals.get(cat, 0) > 0),
+            None,
+        ),
+    })
+
+
 @app.route("/api/day-expenses", methods=["GET"])
 def list_day_expenses():
     year = request.args.get("year", type=int, default=date.today().year)
