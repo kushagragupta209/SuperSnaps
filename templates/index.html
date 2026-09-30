@@ -993,8 +993,46 @@
 </div>
 
 <script>
-let supabaseClient=null,authRequired=false;
-async function initAuth(){try{const r=await fetch('/api/auth/config');const cfg=await r.json();authRequired=!!cfg.configured;if(!authRequired)return;supabaseClient=window.supabase.createClient(cfg.supabase_url,cfg.supabase_anon_key);const originalFetch=window.fetch.bind(window);window.fetch=async(input,init={})=>{const {data:{session}}=await supabaseClient.auth.getSession();if(session?.access_token){init.headers=new Headers(init.headers||{});init.headers.set('Authorization','Bearer '+session.access_token)}return originalFetch(input,init)};const {data:{session}}=await supabaseClient.auth.getSession();if(!session)document.getElementById('authOverlay').classList.add('visible');supabaseClient.auth.onAuthStateChange((_e,s)=>document.getElementById('authOverlay').classList.toggle('visible',!s))}catch(e){console.error('Auth initialization failed',e)}}
+let supabaseClient=null,authRequired=false,authReady=false;
+async function initAuth(){
+  const overlay=document.getElementById('authOverlay');
+  const error=document.getElementById('authError');
+  try{
+    const r=await fetch('/api/auth/config');
+    const cfg=await r.json();
+    authRequired=!!cfg.configured;
+    if(!authRequired){
+      authReady=true;
+      return true;
+    }
+    overlay.classList.add('visible');
+    if(!window.supabase || !cfg.supabase_url || !cfg.supabase_anon_key){
+      error.textContent='Authentication is not available. Check the Supabase configuration.';
+      return false;
+    }
+    supabaseClient=window.supabase.createClient(cfg.supabase_url,cfg.supabase_anon_key);
+    const originalFetch=window.fetch.bind(window);
+    window.fetch=async(input,init={})=>{
+      const {data:{session}}=await supabaseClient.auth.getSession();
+      if(session?.access_token){
+        init.headers=new Headers(init.headers||{});
+        init.headers.set('Authorization','Bearer '+session.access_token);
+      }
+      return originalFetch(input,init);
+    };
+    const {data:{session},error:sessionError}=await supabaseClient.auth.getSession();
+    if(sessionError) throw sessionError;
+    overlay.classList.toggle('visible',!session);
+    supabaseClient.auth.onAuthStateChange((_e,s)=>overlay.classList.toggle('visible',!s));
+    authReady=true;
+    return !!session;
+  }catch(e){
+    console.error('Auth initialization failed',e);
+    overlay.classList.add('visible');
+    error.textContent='Could not initialize authentication. Check the browser console for details.';
+    return false;
+  }
+}
 let authMode='signin';
 document.getElementById('authToggle').onclick=()=>{authMode=authMode==='signin'?'signup':'signin';document.getElementById('authTitle').textContent=authMode==='signin'?'Welcome back':'Create your account';document.getElementById('authSubmit').textContent=authMode==='signin'?'Sign In':'Create Account';document.getElementById('authToggle').textContent=authMode==='signin'?'Create an account':'Back to sign in';document.getElementById('authError').textContent=''};
 document.getElementById('authSubmit').onclick=async()=>{if(!supabaseClient)return;const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value,error=document.getElementById('authError');if(!email||!password){error.textContent='Enter both email and password.';return}const x=authMode==='signin'?await supabaseClient.auth.signInWithPassword({email,password}):await supabaseClient.auth.signUp({email,password});if(x.error){error.textContent=x.error.message;return}error.textContent=authMode==='signup'&&!x.data.session?'Account created. Check your email to confirm it, then sign in.':''};
@@ -2074,7 +2112,7 @@ document.getElementById('saraInput').addEventListener('keydown', (e) => {
 });
 
 // Initial Load
-initAuth().then(() => refreshAll());
+initAuth().then((authenticated) => { if (!authRequired || authenticated) refreshAll(); });
 </script>
 </body>
 </html>
