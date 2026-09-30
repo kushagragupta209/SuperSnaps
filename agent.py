@@ -210,14 +210,78 @@ def parse_expense(text: str):
 
 from datetime import date as _date, timedelta as _timedelta
 
+DAY_EXPENSE_CATEGORIES = [
+    "Healthy Food",
+    "Unhealthy Food / Eating Out",
+    "Groceries",
+    "Transport",
+    "Shopping",
+    "Bills",
+    "Entertainment",
+    "Healthcare",
+    "Travel",
+    "Subscriptions",
+    "Personal Care",
+    "Education",
+    "Other",
+]
+
+# Ordered from most specific to broadest. The user describes the expense;
+# this classifier maps it into one of the fixed dashboard categories.
 DAY_EXPENSE_CATEGORY_KEYWORDS = {
-    "Food": ["food", "grocery", "groceries", "restaurant", "dining", "zomato",
-             "swiggy", "lunch", "dinner", "breakfast"],
-    "Shopping": ["shopping", "amazon", "flipkart", "clothes", "clothing"],
-    "Travel": ["travel", "flight", "hotel", "cab", "uber", "ola", "auto"],
-    "Fuel": ["fuel", "petrol", "diesel"],
-    "Rent": ["rent"],
-    "Entertainment": ["entertainment", "movie", "movies", "netflix", "spotify"],
+    "Healthy Food": [
+        "salad", "fruit", "fruits", "vegetable", "vegetables", "oats",
+        "brown rice", "millet", "sprouts", "protein shake", "protein",
+        "healthy meal", "healthy food", "juice", "smoothie",
+    ],
+    "Unhealthy Food / Eating Out": [
+        "zomato", "swiggy", "pizza", "burger", "fries", "chips", "cake",
+        "ice cream", "icecream", "biryani", "fried", "fast food",
+        "junk food", "restaurant", "dining", "lunch", "dinner", "breakfast",
+        "coffee", "mcdonald", "kfc", "dominos", "starbucks",
+    ],
+    "Groceries": [
+        "grocery", "groceries", "supermarket", "bigbasket", "blinkit",
+        "zepto", "instamart", "vegetables", "vegetable", "milk", "eggs",
+        "rice", "atta", "flour", "dal", "lentils", "oil", "bread",
+    ],
+    "Transport": [
+        "transport", "bus", "metro", "train", "cab", "uber", "ola", "auto",
+        "rickshaw", "rapido", "fuel", "petrol", "diesel", "parking",
+        "toll", "bike service", "car service",
+    ],
+    "Shopping": [
+        "shopping", "amazon", "flipkart", "clothes", "clothing", "shoes",
+        "electronics", "headphones", "keyboard", "monitor", "accessories",
+    ],
+    "Bills": [
+        "rent", "electricity", "water bill", "internet", "wifi", "mobile bill",
+        "phone bill", "gas bill", "maintenance", "bill", "emi",
+    ],
+    "Entertainment": [
+        "entertainment", "movie", "movies", "cinema", "netflix", "spotify",
+        "concert", "game", "gaming", "event",
+    ],
+    "Healthcare": [
+        "healthcare", "doctor", "hospital", "medicine", "medicines",
+        "pharmacy", "medical", "dentist", "clinic", "lab test", "checkup",
+    ],
+    "Travel": [
+        "travel", "flight", "hotel", "resort", "vacation", "trip",
+        "airbnb", "tour", "holiday",
+    ],
+    "Subscriptions": [
+        "subscription", "prime", "youtube premium", "icloud", "google one",
+        "membership", "gym membership", "software subscription",
+    ],
+    "Personal Care": [
+        "personal care", "salon", "haircut", "barber", "spa", "cosmetics",
+        "skincare", "skin care", "shampoo", "soap", "grooming",
+    ],
+    "Education": [
+        "education", "course", "courses", "udemy", "coursera", "book",
+        "books", "tuition", "college", "school", "exam", "certification",
+    ],
 }
 
 _DAY_EXPENSE_AMOUNT_RE = re.compile(
@@ -285,7 +349,7 @@ def parse_day_expense(text: str, reference_date=None):
         # "today", or no date word at all -> the day the message was sent
         resolved_date = ref
 
-    category = "Uncategorized"
+    category = "Other"
     for label, words in DAY_EXPENSE_CATEGORY_KEYWORDS.items():
         if any(w in lowered for w in words):
             category = label
