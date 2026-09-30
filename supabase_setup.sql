@@ -39,3 +39,25 @@ create index if not exists idx_telegram_sara_messages_chat
     on telegram_sara_messages (chat_id, id);
 
 alter table telegram_sara_messages enable row level security;
+
+
+-- Multi-user foundation: application profile linked to Supabase Auth.
+-- Financial tables remain untouched in Phase 1 until ownership migration is verified.
+create table if not exists profiles (
+    id uuid primary key references auth.users(id) on delete cascade,
+    email text,
+    display_name text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+alter table profiles enable row level security;
+
+create policy if not exists profiles_select_own on profiles
+    for select using (auth.uid() = id);
+
+create policy if not exists profiles_insert_own on profiles
+    for insert with check (auth.uid() = id);
+
+create policy if not exists profiles_update_own on profiles
+    for update using (auth.uid() = id) with check (auth.uid() = id);
