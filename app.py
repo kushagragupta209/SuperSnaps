@@ -303,7 +303,13 @@ init_db()
 
 @app.route("/api/auth/config", methods=["GET"])
 def auth_config():
-    return jsonify({"configured": auth.is_configured()})
+    # The anon/publishable key is intentionally safe to expose to the browser.
+    # Never expose SUPABASE_SERVICE_KEY here.
+    return jsonify({
+        "configured": auth.is_configured(),
+        "supabase_url": auth.SUPABASE_URL if auth.is_configured() else None,
+        "supabase_anon_key": auth.SUPABASE_ANON_KEY if auth.is_configured() else None,
+    })
 
 
 @app.route("/api/auth/me", methods=["GET"])
