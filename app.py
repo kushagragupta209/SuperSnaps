@@ -895,7 +895,7 @@ def import_wishlist_product():
     existing = db.execute("SELECT id FROM wishlist WHERE product_url = ? AND user_id = ?", (url, user["id"])).fetchone()
     if existing:
         item_id = existing["id"]
-        db.execute("UPDATE wishlist SET name = ?, price = ?, platform = ? WHERE id = ?", (product["name"], product["price"], product["platform"], item_id))
+        db.execute("UPDATE wishlist SET name = ?, price = ?, platform = ? WHERE id = ? AND user_id = ?", (product["name"], product["price"], product["platform"], item_id, user["id"]))
     else:
         cur = db.execute(
             "INSERT INTO wishlist (name, price, created_at, product_url, platform, user_id) VALUES (?, ?, ?, ?, ?, ?)",
@@ -904,7 +904,7 @@ def import_wishlist_product():
         item_id = cur.lastrowid
     db.execute("INSERT INTO wishlist_price_history (wishlist_id, price, checked_at) VALUES (?, ?, ?)", (item_id, product["price"], datetime.utcnow().isoformat()))
     db.commit()
-    row = db.execute("SELECT * FROM wishlist WHERE id = ?", (item_id, user["id"])).fetchone()
+    row = db.execute("SELECT * FROM wishlist WHERE id = ? AND user_id = ?", (item_id, user["id"])).fetchone()
     return jsonify(dict(row)), 201
 
 
@@ -912,7 +912,7 @@ def import_wishlist_product():
 def wishlist_price_history(item_id):
     user = require_user()
     db = get_db()
-    item = db.execute("SELECT * FROM wishlist WHERE id = ?", (item_id,)).fetchone()
+    item = db.execute("SELECT * FROM wishlist WHERE id = ? AND user_id = ?", (item_id, user["id"])).fetchone()
     if not item:
         return jsonify({"error": "Wishlist item not found."}), 404
     rows = db.execute("SELECT price, checked_at FROM wishlist_price_history WHERE wishlist_id = ? ORDER BY checked_at ASC", (item_id,)).fetchall()
@@ -961,7 +961,7 @@ def manual_wishlist_price(item_id):
     if not item:
         return jsonify({"error": "Wishlist item not found."}), 404
     now = datetime.utcnow().isoformat()
-    db.execute("UPDATE wishlist SET price = ? WHERE id = ?", (price, item_id))
+    db.execute("UPDATE wishlist SET price = ? WHERE id = ? AND user_id = ?", (price, item_id, user["id"]))
     db.execute("INSERT INTO wishlist_price_history (wishlist_id, price, checked_at) VALUES (?, ?, ?)", (item_id, price, now))
     db.commit()
     return jsonify({"id": item_id, "price": price, "checked_at": now})
