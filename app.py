@@ -1349,6 +1349,10 @@ def save_monthly_expenses():
     """
     data = request.get_json(force=True)
     text = data.get("text", "")
+    # This endpoint is exclusively for recurring/fixed monthly expenses.
+    # One-off spending must use /api/day-expenses instead.
+    if data.get("expense_type") == "daily":
+        return jsonify({"error": "Daily expenses must be saved through the day-wise expense flow."}), 400
     year = int(data.get("year") or date.today().year)
     month = int(data.get("month") or date.today().month)
     items = data.get("items")
