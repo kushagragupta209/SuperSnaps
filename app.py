@@ -1341,7 +1341,7 @@ def save_day_expenses():
     if not saved:
         return jsonify({"error": "No valid items with a resolved date (YYYY-MM-DD) and amount were provided."}), 400
 
-    snapshot = _expense_budget_snapshot(db, saved[-1]["date"])
+    snapshot = _expense_budget_snapshot(db, saved[-1]["date"], user["id"])
     return jsonify({"items": saved, "skipped": skipped, "budget": snapshot}), 201
 
 
@@ -1450,7 +1450,7 @@ def sync_telegram_expenses():
 
     db.commit()
 
-    budget = _expense_budget_snapshot(db, saved[-1]["date"]) if saved else _expense_budget_snapshot(db)
+    budget = _expense_budget_snapshot(db, saved[-1]["date"], user["id"]) if saved else _expense_budget_snapshot(db, user_id=user["id"])
 
     try:
         telegram_sync.mark_processed(db, processed_ids)
