@@ -1471,6 +1471,7 @@ def status():
 
 @app.route("/api/monthly-expenses", methods=["POST"])
 def save_monthly_expenses():
+    user = require_user()
     """
     Body: { "text": "...", "year": 2026, "month": 8, "items": [optional edited list] }
     If "items" is provided (user edited the parsed preview), use it directly;
@@ -1496,12 +1497,12 @@ def save_monthly_expenses():
 
     db = get_db()
     # Replace existing entries for that month so re-submitting doesn't duplicate.
-    db.execute("DELETE FROM monthly_expenses WHERE year = ? AND month = ?", (year, month))
+    db.execute("DELETE FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ?", (year, month, user["id"]))
     for item in parsed:
         db.execute(
-            "INSERT INTO monthly_expenses (year, month, category, amount, raw_text, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (year, month, item["category"], float(item["amount"]), text, datetime.utcnow().isoformat()),
+            "INSERT INTO monthly_expenses (year, month, category, amount, raw_text, created_at, user_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (year, month, item["category"], float(item["amount"]), text, datetime.utcnow().isoformat(), user["id"]),
         )
     db.commit()
 
