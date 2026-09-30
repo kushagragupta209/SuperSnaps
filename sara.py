@@ -326,6 +326,14 @@ def _execute_tool(client, name, args, telegram_chat_id=None):
 
     args = dict(args or {})
 
+    # Fixed monthly expenses are dashboard-only. Telegram must never be able
+    # to create or modify them, regardless of what Sara decides to call.
+    if name == "log_monthly_expenses" and telegram_chat_id is not None:
+        return {
+            "error": "Fixed monthly expenses can only be edited from the dashboard.",
+            "telegram_blocked": True,
+        }
+
     if name == "add_flight_tracker" and telegram_chat_id is not None:
         args["telegram_chat_id"] = telegram_chat_id
         args.setdefault("notify_telegram", True)
