@@ -1227,9 +1227,9 @@ def _expense_budget_snapshot(db, expense_date=None, user_id=None):
     except ValueError:
         expense_day = date.today()
 
-    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary'").fetchone()
+    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user["id"],)).fetchone()
     salary = float(salary_row["value"]) if salary_row else None
-    savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent'").fetchone()
+    savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent' AND user_id = ?", (user["id"],)).fetchone()
     savings_pct = float(savings_row["value"]) if savings_row else agent.DEFAULT_SAVINGS_PERCENT
 
     month_prefix = f"{expense_day.year:04d}-{expense_day.month:02d}"
@@ -1534,20 +1534,21 @@ def save_monthly_expenses():
     db.commit()
 
     rows = db.execute(
-        "SELECT * FROM monthly_expenses WHERE year = ? AND month = ? ORDER BY amount DESC",
-        (year, month),
+        "SELECT * FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ? ORDER BY amount DESC",
+        (year, month, user["id"]),
     ).fetchall()
     return jsonify({"items": [dict(r) for r in rows], "source": source}), 201
 
 
 @app.route("/api/monthly-expenses", methods=["GET"])
 def get_monthly_expenses():
+    user = require_user()
     year = request.args.get("year", type=int, default=date.today().year)
     month = request.args.get("month", type=int, default=date.today().month)
     db = get_db()
     rows = db.execute(
         "SELECT * FROM monthly_expenses WHERE year = ? AND month = ? ORDER BY amount DESC",
-        (year, month),
+        (year, month, user["id"]),
     ).fetchall()
     return jsonify([dict(r) for r in rows])
 
@@ -1558,6 +1559,7 @@ def get_monthly_expenses():
 
 @app.route("/api/summary", methods=["GET"])
 def summary():
+    user = require_user()
     """
     Aggregates everything the dashboard needs:
       - total spend on tracked purchases (all time)
@@ -1571,7 +1573,7 @@ def summary():
 
     db = get_db()
 
-    total_purchases = db.execute("SELECT COALESCE(SUM(price), 0) AS s FROM purchases").fetchone()["s"]
+    total_purchases = db.execute("SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE user_id = ?", (user["id"],)).fetchone()["s"]
 
     month_prefix = f"{year:04d}-{month:02d}"
     month_purchases = db.execute(
@@ -1623,6 +1625,7 @@ from datetime import datetime, date
 
 @app.route("/api/budget/safe-to-spend", methods=["GET"])
 def safe_to_spend():
+    user = require_user()
     """
     Calculates remaining discretionary allowance for the month and splits
     it across remaining days (today included).
@@ -1650,7 +1653,7 @@ def safe_to_spend():
 
     fixed_total = db.execute(
         "SELECT COALESCE(SUM(amount), 0) AS s FROM monthly_expenses WHERE year = ? AND month = ?",
-        (today.year, today.month),
+        (today.year, today.month, user["id"]),
     ).fetchone()["s"]
 
     # Also count day_expenses (manual entries + Telegram sync) for this month
@@ -1680,7 +1683,7 @@ def safe_to_spend():
     today_str = today.isoformat()
     purchases_today = db.execute(
         "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on = ?",
-        (today_str,),
+        (today_str, user["id"]),
     ).fetchone()["s"]
     day_expenses_today = db.execute(
         "SELECT COALESCE(SUM(amount), 0) AS s FROM day_expenses WHERE date = ?",
