@@ -596,6 +596,28 @@
       </div>
       <div id="spentCalendarTooltip" class="spent-calendar-tooltip"></div>
 
+      <!-- Monthly Spending Categories -->
+      <div class="card" id="categorySpendingCard">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+          <div>
+            <h3 style="margin:0;"><span class="num">03</span>Where Your Money Goes</h3>
+            <div class="hint" style="margin-top:4px;">Automatically categorized from your expense descriptions.</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-ghost" id="categoryMonthPrev" aria-label="Previous month">←</button>
+            <div id="categoryMonthLabel" style="font:12px var(--font-mono); min-width:110px; text-align:center;">—</div>
+            <button class="btn-ghost" id="categoryMonthNext" aria-label="Next month">→</button>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:minmax(180px, .8fr) 1.2fr; gap:20px; align-items:center; margin-top:18px;">
+          <div style="height:230px; position:relative;">
+            <canvas id="categorySpendingChart"></canvas>
+          </div>
+          <div id="categorySpendingLegend" style="display:grid; gap:8px;"></div>
+        </div>
+        <div id="categorySpendingTop" class="hint" style="margin-top:12px;"></div>
+      </div>
+
       <!-- Salary & Savings Setup -->
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -1013,6 +1035,81 @@ if (savedTab && ['overview','transactions','spending','wishlist','flights','insi
   activateTab(savedTab);
 }
 
+/* ---------- Monthly Spending Categories ---------- */
+let categorySpendingDate = new Date();
+categorySpendingDate.setDate(1);
+const CATEGORY_COLORS = ['#6b8f71','#8fa98f','#b4c7b7','#c79b68','#9a7b5f','#7d8f9d','#a58cae','#b77b7b','#6f8f9f','#8b806b','#7d997d','#9a9a6a','#8b8b8b'];
+let categorySpendingChart = null;
+
+async function loadCategorySpending(){
+  const label = document.getElementById('categoryMonthLabel');
+  const legend = document.getElementById('categorySpendingLegend');
+  const top = document.getElementById('categorySpendingTop');
+  const canvas = document.getElementById('categorySpendingChart');
+  if(!label || !legend || !canvas) return;
+
+  const year = categorySpendingDate.getFullYear();
+  const month = categorySpendingDate.getMonth()+1;
+  label.textContent = categorySpendingDate.toLocaleDateString('en-IN',{month:'short',year:'numeric'});
+
+  try{
+    const r = await fetch(`/api/day-expenses/categories?year=${year}&month=${month}`);
+    const d = await r.json();
+    if(!r.ok) throw new Error();
+
+    const rows = d.categories || [];
+    legend.innerHTML = rows.map((row,i) => `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:12px;">
+        <span style="display:flex; align-items:center; gap:7px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:${CATEGORY_COLORS[i % CATEGORY_COLORS.length]};display:inline-block;"></span>
+          <span>${escapeHtml(row.category)}</span>
+        </span>
+        <strong>${fmt(row.amount)}</strong>
+      </div>`).join('');
+
+    if(categorySpendingChart) categorySpendingChart.destroy();
+    categorySpendingChart = new Chart(canvas.getContext('2d'),{
+      type:'doughnut',
+      data:{
+        labels:rows.map(r=>r.category),
+        datasets:[{
+          data:rows.map(r=>Number(r.amount||0)),
+          backgroundColor:CATEGORY_COLORS,
+          borderWidth:0
+        }]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        cutout:'62%',
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{label:c=>` ${c.label}: ${fmt(c.parsed)}`}}
+        }
+      }
+    });
+
+    top.textContent = d.top_category
+      ? `Highest spending: ${d.top_category.category} — ${fmt(d.top_category.amount)}`
+      : 'No categorized spending recorded for this month.';
+  }catch(e){
+    legend.innerHTML='<div class="hint">Could not load category spending.</div>';
+    top.textContent='Category data unavailable.';
+  }
+}
+document.getElementById('categoryMonthPrev').onclick=()=>{
+  categorySpendingDate.setMonth(categorySpendingDate.getMonth()-1);
+  loadCategorySpending();
+};
+document.getElementById('categoryMonthNext').onclick=()=>{
+  const n=new Date(categorySpendingDate);
+  n.setMonth(n.getMonth()+1);
+  const now=new Date();
+  if(n.getFullYear()>now.getFullYear() || (n.getFullYear()===now.getFullYear() && n.getMonth()>now.getMonth())) return;
+  categorySpendingDate=n;
+  loadCategorySpending();
+};
+
 /* ---------- Spent-wise Calendar ---------- */
 let spentCalendarDate = new Date();
 spentCalendarDate.setDate(1);
@@ -1055,7 +1152,7 @@ async function refreshAll(){
     loadSalary(), loadTimeline(), loadSummary(), loadStatus(),
     loadProfile(), loadRecommendations(), loadWishlist(),
     loadSavingsPercent(), loadInsights(), loadDayExpenses(), loadSpentCalendar(),
-    loadSafeToSpend(), loadFlights()
+    loadCategorySpending(), loadSafeToSpend(), loadFlights()
   ]);
 }
 
