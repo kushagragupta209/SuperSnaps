@@ -1077,7 +1077,7 @@ def add_flight():
                 target_price, notify_email, telegram_chat_id, notify_telegram, current_price, lowest_price, active, created_at, user_id)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 1, ?, ?)""",
         (origin, destination, departure_date, return_date, adults, travel_class,
-         target_price, notify_email, telegram_chat_id, notify_telegram, now),
+         target_price, notify_email, telegram_chat_id, notify_telegram, now, user["id"]),
     )
     flight_id = cur.lastrowid
     db.commit()
