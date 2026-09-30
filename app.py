@@ -667,14 +667,17 @@ def set_profile():
 
 @app.route("/api/recommendations", methods=["GET"])
 def recommendations():
+    user = require_user()
     db = get_db()
     purchase_rows = db.execute(
-        "SELECT name, price FROM purchases ORDER BY purchased_on DESC, id DESC LIMIT 20"
+        "SELECT name, price FROM purchases WHERE user_id = ? ORDER BY purchased_on DESC, id DESC LIMIT 20",
+        (user["id"],)
     ).fetchall()
     purchases = [dict(r) for r in purchase_rows]
 
     profile_rows = db.execute(
-        "SELECT key, value FROM settings WHERE key IN ('profession', 'interests')"
+        "SELECT key, value FROM settings WHERE key IN ('profession', 'interests') AND user_id = ?",
+        (user["id"],)
     ).fetchall()
     values = {r["key"]: r["value"] for r in profile_rows}
 
