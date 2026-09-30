@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 """
 Ledger — a local-first personal purchase timeline + monthly expense tracker.
 
