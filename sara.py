@@ -141,7 +141,7 @@ TOOLS = [
     }},
     {"type": "function", "function": {
         "name": "sync_telegram_expenses",
-        "description": "Pull and parse any pending expense messages sent over Telegram into day-wise expenses.",
+        "description": "Pull and parse pending Telegram expenses into day-wise expenses. The result also includes how much discretionary budget is left for the day and month, plus the user's highest-spend categories for the month.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
@@ -291,6 +291,7 @@ Rules:
   conversation. If they haven't, call the tool with confirmed=false (or omit
   it) to see what it targets, then ask the user to confirm in plain language
   before trying again with confirmed=true.
+- When processing Telegram expense logging/sync, use sync_telegram_expenses. After a successful save, clearly tell the user the amount left for the day and month when budget data is configured, and mention their top spending category/categories from the monthly category breakdown.
 - For questions about past spending, totals, or trends, use
   ask_financial_question rather than trying to compute it yourself.
 - After calling tools, reply in plain, friendly language. Never mention SQL,
