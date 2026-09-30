@@ -53,11 +53,18 @@ create table if not exists profiles (
 
 alter table profiles enable row level security;
 
-create policy if not exists profiles_select_own on profiles
-    for select using (auth.uid() = id);
-
-create policy if not exists profiles_insert_own on profiles
-    for insert with check (auth.uid() = id);
+do $
+begin
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles_select_own') then
+        create policy profiles_select_own on profiles for select using (auth.uid() = id);
+    end if;
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles_insert_own') then
+        create policy profiles_insert_own on profiles for insert with check (auth.uid() = id);
+    end if;
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles_update_own') then
+        create policy profiles_update_own on profiles for update using (auth.uid() = id) with check (auth.uid() = id);
+    end if;
+end $;
 
 create policy if not exists profiles_update_own on profiles
     for update using (auth.uid() = id) with check (auth.uid() = id);
