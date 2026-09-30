@@ -29,6 +29,7 @@ import flights
 import telegram_sync
 import sara
 import db_pg
+import auth
 
 APP_DIR = Path(__file__).parent
 DB_PATH = APP_DIR / "ledger.db"
@@ -294,6 +295,23 @@ def _init_db_postgres():
 # all). CREATE TABLE IF NOT EXISTS is idempotent, so re-running this on
 # every worker boot is safe.
 init_db()
+
+
+# --------------------------------------------------------------------------- #
+# Routes — authentication / multi-user foundation
+# --------------------------------------------------------------------------- #
+
+@app.route("/api/auth/config", methods=["GET"])
+def auth_config():
+    return jsonify({"configured": auth.is_configured()})
+
+
+@app.route("/api/auth/me", methods=["GET"])
+def auth_me():
+    user = auth.get_user_from_token(auth.get_bearer_token(request))
+    if not user:
+        return jsonify({"authenticated": False}), 401
+    return jsonify({"authenticated": True, "user": user})
 
 
 # --------------------------------------------------------------------------- #
