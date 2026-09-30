@@ -1278,6 +1278,7 @@ def _expense_budget_snapshot(db, expense_date=None):
 
 @app.route("/api/day-expenses", methods=["POST"])
 def save_day_expenses():
+    user = require_user()
     """
     Body: { "items": [{"date": "2026-08-14", "merchant": "Blinkit", "category": "Food", "amount": 342, "source": "vision"}, ...] }
     Saves the (possibly user-edited) parsed screenshot items. Items without
@@ -1311,8 +1312,8 @@ def save_day_expenses():
             continue
 
         cur = db.execute(
-            "INSERT INTO day_expenses (date, merchant, category, amount, source, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO day_expenses (date, merchant, category, amount, source, created_at, user_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (date_str, merchant, category, amount, source, datetime.utcnow().isoformat(), user["id"]),
         )
         row = db.execute("SELECT * FROM day_expenses WHERE id = ? AND user_id = ?", (cur.lastrowid, user["id"])).fetchone()
@@ -1328,6 +1329,7 @@ def save_day_expenses():
 
 @app.route("/api/day-expenses/categories", methods=["GET"])
 def day_expense_categories():
+    user = require_user()
     year = request.args.get("year", type=int, default=date.today().year)
     month = request.args.get("month", type=int, default=date.today().month)
     month_prefix = f"{year:04d}-{month:02d}"
@@ -1335,9 +1337,9 @@ def day_expense_categories():
     db = get_db()
     rows = db.execute(
         "SELECT category, COALESCE(SUM(amount), 0) AS amount "
-        "FROM day_expenses WHERE date LIKE ? "
+        "FROM day_expenses WHERE date LIKE ? AND user_id = ? "
         "GROUP BY category ORDER BY amount DESC",
-        (f"{month_prefix}%",),
+        (f"{month_prefix}%", user["id"]),,
     ).fetchall()
     totals = {row["category"]: round(float(row["amount"] or 0), 2) for row in rows}
     categories = getattr(agent, "DAY_EXPENSE_CATEGORIES", ["Other"])
@@ -1354,14 +1356,15 @@ def day_expense_categories():
 
 @app.route("/api/day-expenses", methods=["GET"])
 def list_day_expenses():
+    user = require_user()
     year = request.args.get("year", type=int, default=date.today().year)
     month = request.args.get("month", type=int, default=date.today().month)
     month_prefix = f"{year:04d}-{month:02d}"
 
     db = get_db()
     rows = db.execute(
-        "SELECT * FROM day_expenses WHERE date LIKE ? ORDER BY date DESC, id DESC",
-        (f"{month_prefix}%",),
+        "SELECT * FROM day_expenses WHERE date LIKE ? AND user_id = ? ORDER BY date DESC, id DESC",
+        (f"{month_prefix}%", user["id"]),,
     ).fetchall()
     items = [dict(r) for r in rows]
 
@@ -1376,6 +1379,7 @@ def list_day_expenses():
 
 @app.route("/api/day-expenses/<int:item_id>", methods=["DELETE"])
 def delete_day_expense(item_id):
+    user = require_user()
     db = get_db()
     db.execute("DELETE FROM day_expenses WHERE id = ? AND user_id = ?", (item_id, user["id"]))
     db.commit()
