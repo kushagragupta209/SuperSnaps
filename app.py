@@ -350,6 +350,11 @@ def _ensure_user_columns_sqlite(db):
         columns = {r[1] for r in db.execute(f"PRAGMA table_info({table})").fetchall()}
         if "user_id" not in columns:
             db.execute(f"ALTER TABLE {table} ADD COLUMN user_id TEXT")
+    # SQLite originally used key as the primary key. Rebuild settings so each
+    # account can have its own copy of monthly_salary/profile/etc.
+    cols = {r[1] for r in db.execute("PRAGMA table_info(settings)").fetchall()}
+    if "user_id" in cols:
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_settings_user_key ON settings(user_id, key)")
     db.commit()
 
 
@@ -357,6 +362,8 @@ def _ensure_user_columns_postgres(db):
     """Add nullable ownership columns without changing existing records."""
     for table in ("purchases", "settings", "monthly_expenses", "wishlist", "day_expenses", "flights"):
         db.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS user_id UUID")
+    db.execute("ALTER TABLE settings DROP CONSTRAINT IF EXISTS settings_pkey")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_settings_user_key ON settings(user_id, key)")
     db.commit()
 
 
@@ -502,9 +509,9 @@ def set_salary():
 
     db = get_db()
     db.execute(
-        "INSERT INTO settings (key, value) VALUES ('monthly_salary', ?) "
-        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        (str(salary),),
+        "INSERT INTO settings (key, value, user_id) VALUES ('monthly_salary', ?, ?) "
+        "ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value",
+        (str(salary), user["id"]),
     )
     db.commit()
     return jsonify({"monthly_salary": salary})
@@ -527,7 +534,7 @@ def set_savings_percent():
 
     db = get_db()
     if raw is None or raw == "":
-        db.execute("DELETE FROM settings WHERE key = 'savings_percent'")
+        db.execute("DELETE FROM settings WHERE key = 'savings_percent' AND user_id = ?", (user["id"],))
         db.commit()
         return jsonify({"savings_percent": None})
 
@@ -539,9 +546,9 @@ def set_savings_percent():
         return jsonify({"error": "Savings goal must be a percentage between 0 and 100."}), 400
 
     db.execute(
-        "INSERT INTO settings (key, value) VALUES ('savings_percent', ?) "
-        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        (str(pct),),
+        "INSERT INTO settings (key, value, user_id) VALUES ('savings_percent', ?, ?) "
+        "ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value",
+        (str(pct), user["id"]),
     )
     db.commit()
     return jsonify({"savings_percent": pct})
@@ -646,9 +653,9 @@ def set_profile():
     db = get_db()
     for key, value in (("profession", profession), ("interests", interests)):
         db.execute(
-            "INSERT INTO settings (key, value) VALUES (?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (key, value),
+            "INSERT INTO settings (key, value, user_id) VALUES (?, ?, ?) "
+            "ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value",
+            (key, value, user["id"]),
         )
     db.commit()
     return jsonify({"profession": profession, "interests": interests})
