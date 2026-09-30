@@ -605,7 +605,7 @@ def insights():
     salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user["id"],)).fetchone()
     salary = float(salary_row["value"]) if salary_row else None
 
-    savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent'").fetchone()
+    savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent' AND user_id = ?", (user_id,)).fetchone()
     savings_percent = float(savings_row["value"]) if savings_row else None
 
     context = {
@@ -703,14 +703,14 @@ def list_wishlist():
     ).fetchall()
     items = [dict(r) for r in rows]
 
-    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary'").fetchone()
+    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user_id,)).fetchone()
     salary = float(salary_row["value"]) if salary_row else None
 
     today = date.today()
     month_prefix = f"{today.year:04d}-{today.month:02d}"
     month_purchases = db.execute(
-        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ?",
-        (f"{month_prefix}%",),
+        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
+        (f"{month_prefix}%", user_id),
     ).fetchone()["s"]
     fixed_total = db.execute(
         "SELECT COALESCE(SUM(amount), 0) AS s FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ?",
@@ -978,6 +978,7 @@ def delete_wishlist(item_id):
 
 @app.route("/api/flights/search", methods=["POST"])
 def search_flights():
+    user = require_user()
     """
     Preview lookup used while filling out the tracker form — returns every
     fare SerpApi found (airline + price, sorted cheapest first) without
@@ -1019,13 +1020,15 @@ def search_flights():
 
 @app.route("/api/flights", methods=["GET"])
 def list_flights():
+    user = require_user()
     db = get_db()
-    rows = db.execute("SELECT * FROM flights ORDER BY created_at DESC").fetchall()
+    rows = db.execute("SELECT * FROM flights WHERE user_id = ? ORDER BY created_at DESC", (user["id"],)).fetchall()
     return jsonify([dict(r) for r in rows])
 
 
 @app.route("/api/flights", methods=["POST"])
 def add_flight():
+    user = require_user()
     data = request.get_json(force=True)
     origin = (data.get("origin") or "").strip().upper()
     destination = (data.get("destination") or "").strip().upper()
@@ -1071,9 +1074,8 @@ def add_flight():
     cur = db.execute(
         """INSERT INTO flights
                (origin, destination, departure_date, return_date, adults, travel_class,
-                target_price, notify_email, telegram_chat_id, notify_telegram,
-                current_price, lowest_price, active, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 1, ?)""",
+                target_price, notify_email, telegram_chat_id, notify_telegram, current_price, lowest_price, active, created_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 1, ?, ?)""",
         (origin, destination, departure_date, return_date, adults, travel_class,
          target_price, notify_email, telegram_chat_id, notify_telegram, now),
     )
@@ -1103,7 +1105,7 @@ def add_flight():
     except requests.RequestException:
         warning = "Could not reach the flight pricing provider. You can check the fare manually later."
 
-    row = dict(db.execute("SELECT * FROM flights WHERE id = ?", (flight_id,)).fetchone())
+    row = dict(db.execute("SELECT * FROM flights WHERE id = ? AND user_id = ?", (flight_id, user["id"])).fetchone())
     if warning:
         row["warning"] = warning
     return jsonify(row), 201
@@ -1111,6 +1113,7 @@ def add_flight():
 
 @app.route("/api/flights/check-by-details", methods=["POST"])
 def check_flight_fare_by_details():
+    user = require_user()
     """Resolve a saved tracker by route/date details, keeping its internal id hidden from Sara's user-facing flow."""
     data = request.get_json(force=True)
     origin = (data.get("origin") or "").strip().upper()
@@ -1130,14 +1133,14 @@ def check_flight_fare_by_details():
         row = db.execute(
             "SELECT * FROM flights WHERE origin = ? AND destination = ? "
             "AND departure_date = ? AND (return_date = ? OR (return_date IS NULL AND ? = '')) "
-            "AND active = 1 ORDER BY created_at DESC LIMIT 1",
-            (origin, destination, departure_date, return_date, return_date),
+            "AND active = 1 AND user_id = ? ORDER BY created_at DESC LIMIT 1",
+            (origin, destination, departure_date, return_date, return_date, user["id"]),
         ).fetchone()
     else:
         row = db.execute(
             "SELECT * FROM flights WHERE origin = ? AND destination = ? "
-            "AND departure_date = ? AND active = 1 ORDER BY created_at DESC LIMIT 1",
-            (origin, destination, departure_date),
+            "AND departure_date = ? AND active = 1 AND user_id = ? ORDER BY created_at DESC LIMIT 1",
+            (origin, destination, departure_date, user["id"]),
         ).fetchone()
 
     if not row:
@@ -1175,8 +1178,8 @@ def check_flight_fare(flight_id):
     lowest = price if lowest is None else min(lowest, price)
     now = datetime.utcnow().isoformat()
     db.execute(
-        "UPDATE flights SET current_price = ?, lowest_price = ? WHERE id = ?",
-        (price, lowest, flight_id),
+        "UPDATE flights SET current_price = ?, lowest_price = ? WHERE id = ? AND user_id = ?",
+        (price, lowest, flight_id, user["id"]),
     )
     db.execute(
         "INSERT INTO flight_price_history (flight_id, price, checked_at) VALUES (?, ?, ?)",
@@ -1202,12 +1205,12 @@ def flight_price_history(flight_id):
 @app.route("/api/flights/<int:flight_id>", methods=["DELETE"])
 def delete_flight(flight_id):
     db = get_db()
-    db.execute("DELETE FROM flights WHERE id = ?", (flight_id,))
+    db.execute("DELETE FROM flights WHERE id = ? AND user_id = ?", (flight_id, user["id"]))
     db.commit()
     return jsonify({"deleted": flight_id})
 
 
-def _expense_budget_snapshot(db, expense_date=None):
+def _expense_budget_snapshot(db, expense_date=None, user_id=None):
     """Return the current discretionary budget and category-spend snapshot."""
     expense_date = expense_date or date.today().isoformat()
     try:
@@ -1226,12 +1229,12 @@ def _expense_budget_snapshot(db, expense_date=None):
         (f"{month_prefix}%",),
     ).fetchone()["s"]
     fixed_total = db.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS s FROM monthly_expenses WHERE year = ? AND month = ?",
-        (expense_day.year, expense_day.month),
+        "SELECT COALESCE(SUM(amount), 0) AS s FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ?",
+        (expense_day.year, expense_day.month, user_id),
     ).fetchone()["s"]
     day_spend_total = db.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS s FROM day_expenses WHERE date LIKE ?",
-        (f"{month_prefix}%",),
+        "SELECT COALESCE(SUM(amount), 0) AS s FROM day_expenses WHERE date LIKE ? AND user_id = ?",
+        (f"{month_prefix}%", user_id),
     ).fetchone()["s"]
 
     discretionary_spent = float(purchases_total or 0) + float(day_spend_total or 0)
@@ -1252,12 +1255,12 @@ def _expense_budget_snapshot(db, expense_date=None):
         monthly_left = round(monthly_pool - discretionary_spent, 2)
 
         today_purchases = db.execute(
-            "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on = ?",
-            (expense_day.isoformat(),),
+            "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on = ? AND user_id = ?",
+            (expense_day.isoformat(), user_id),
         ).fetchone()["s"]
         today_day_expenses = db.execute(
-            "SELECT COALESCE(SUM(amount), 0) AS s FROM day_expenses WHERE date = ?",
-            (expense_day.isoformat(),),
+            "SELECT COALESCE(SUM(amount), 0) AS s FROM day_expenses WHERE date = ? AND user_id = ?",
+            (expense_day.isoformat(), user_id),
         ).fetchone()["s"]
         spent_today = float(today_purchases or 0) + float(today_day_expenses or 0)
 
