@@ -483,6 +483,7 @@ def delete_purchase(purchase_id):
 
 @app.route("/api/settings/salary", methods=["GET"])
 def get_salary():
+    user = require_user()
     db = get_db()
     row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user["id"],)).fetchone()
     return jsonify({"monthly_salary": float(row["value"]) if row else None})
@@ -490,6 +491,7 @@ def get_salary():
 
 @app.route("/api/settings/salary", methods=["POST"])
 def set_salary():
+    user = require_user()
     data = request.get_json(force=True)
     try:
         salary = float(data.get("monthly_salary"))
@@ -510,13 +512,15 @@ def set_salary():
 
 @app.route("/api/settings/savings-percent", methods=["GET"])
 def get_savings_percent():
+    user = require_user()
     db = get_db()
-    row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent'").fetchone()
+    row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent' AND user_id = ?", (user["id"],)).fetchone()
     return jsonify({"savings_percent": float(row["value"]) if row else None})
 
 
 @app.route("/api/settings/savings-percent", methods=["POST"])
 def set_savings_percent():
+    user = require_user()
     """Blank/null clears the goal so insights fall back to the 50/30/20 default."""
     data = request.get_json(force=True)
     raw = data.get("savings_percent")
@@ -547,16 +551,16 @@ def set_savings_percent():
 # Routes — API: spending insights (LLM/rule-based monthly review + budget)
 # --------------------------------------------------------------------------- #
 
-def _month_spend(db, year, month):
+def _month_spend(db, year, month, user_id):
     """Returns (purchases_total, fixed_total, fixed_rows) for one (year, month)."""
     month_prefix = f"{year:04d}-{month:02d}"
     purchases_total = db.execute(
         "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
-        (f"{month_prefix}%", user["id"]),,
+        (f"{month_prefix}%", user_id),
     ).fetchone()["s"]
     fixed_rows = db.execute(
-        "SELECT category, amount FROM monthly_expenses WHERE year = ? AND month = ? ORDER BY amount DESC",
-        (year, month),
+        "SELECT category, amount FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ? ORDER BY amount DESC",
+        (year, month, user_id),
     ).fetchall()
     fixed_total = sum(r["amount"] for r in fixed_rows)
     return purchases_total, fixed_total, [dict(r) for r in fixed_rows]
@@ -564,6 +568,7 @@ def _month_spend(db, year, month):
 
 @app.route("/api/insights", methods=["GET"])
 def insights():
+    user = require_user()
     """
     Judges the current month's spending against salary/savings goal and
     recent history, and proposes a next-month budget. See agent.py's
@@ -573,11 +578,11 @@ def insights():
     db = get_db()
     today = date.today()
 
-    month_purchases, fixed_total, fixed_expenses = _month_spend(db, today.year, today.month)
+    month_purchases, fixed_total, fixed_expenses = _month_spend(db, today.year, today.month, user["id"])
 
     ytd_purchases = db.execute(
-        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ?",
-        (f"{today.year:04d}-%",),
+        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
+        (f"{today.year:04d}-%", user["id"]),,
     ).fetchone()["s"]
 
     # Last 6 months including the current one, oldest first.
@@ -587,10 +592,10 @@ def insights():
         while m <= 0:
             m += 12
             y -= 1
-        p, f, _ = _month_spend(db, y, m)
+        p, f, _ = _month_spend(db, y, m, user["id"])
         history.append({"year": y, "month": m, "purchases": round(p, 2), "fixed_expenses": round(f, 2)})
 
-    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary'").fetchone()
+    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user["id"],)).fetchone()
     salary = float(salary_row["value"]) if salary_row else None
 
     savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent'").fetchone()
@@ -619,9 +624,10 @@ def insights():
 
 @app.route("/api/settings/profile", methods=["GET"])
 def get_profile():
+    user = require_user()
     db = get_db()
     rows = db.execute(
-        "SELECT key, value FROM settings WHERE key IN ('profession', 'interests')"
+        "SELECT key, value FROM settings WHERE key IN ('profession', 'interests') AND user_id = ?", (user["id"],)
     ).fetchall()
     values = {r["key"]: r["value"] for r in rows}
     return jsonify({
@@ -632,6 +638,7 @@ def get_profile():
 
 @app.route("/api/settings/profile", methods=["POST"])
 def set_profile():
+    user = require_user()
     data = request.get_json(force=True)
     profession = (data.get("profession") or "").strip()
     interests = (data.get("interests") or "").strip()
