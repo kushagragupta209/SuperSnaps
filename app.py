@@ -25,7 +25,7 @@ from urllib.parse import urlparse
 from datetime import datetime, date
 from pathlib import Path
 
-from flask import Flask, g, jsonify, render_template, request
+from flask import Flask, g, jsonify, render_template, request, abort
 
 import agent
 import flights
@@ -321,6 +321,80 @@ def auth_me():
     if not user:
         return jsonify({"authenticated": False}), 401
     return jsonify({"authenticated": True, "user": user})
+
+
+def _ensure_user_columns_sqlite(db):
+    """Add nullable ownership columns without changing existing records."""
+    for table in ("purchases", "settings", "monthly_expenses", "wishlist", "day_expenses", "flights"):
+        columns = {r[1] for r in db.execute(f"PRAGMA table_info({table})").fetchall()}
+        if "user_id" not in columns:
+            db.execute(f"ALTER TABLE {table} ADD COLUMN user_id TEXT")
+    db.commit()
+
+
+def _ensure_user_columns_postgres(db):
+    """Add nullable ownership columns without changing existing records."""
+    for table in ("purchases", "settings", "monthly_expenses", "wishlist", "day_expenses", "flights"):
+        db.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS user_id UUID")
+    db.commit()
+
+
+def ensure_user_columns():
+    db = get_db()
+    if db_pg.is_postgres_configured():
+        _ensure_user_columns_postgres(db)
+    else:
+        _ensure_user_columns_sqlite(db)
+
+
+def current_user():
+    """Return the Supabase user represented by this request's Bearer token."""
+    if hasattr(g, "current_user"):
+        return g.current_user
+    g.current_user = auth.get_user_from_token(auth.get_bearer_token(request))
+    return g.current_user
+
+
+def require_user():
+    user = current_user()
+    if not user:
+        abort(401, description="Authentication required.")
+    return user
+
+
+# Ownership columns are nullable during migration so existing single-user
+# records remain intact until they are explicitly assigned to an account.
+ensure_user_columns()
+
+
+@app.route("/api/profile", methods=["GET", "POST"])
+def profile():
+    """Read or create the signed-in user's profile."""
+    user = require_user()
+    db = get_db()
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        display_name = (data.get("display_name") or "").strip() or None
+        if db_pg.is_postgres_configured():
+            db.execute("""INSERT INTO profiles (id, email, display_name) VALUES (?, ?, ?)
+                ON CONFLICT (id) DO UPDATE SET email=excluded.email,
+                display_name=excluded.display_name, updated_at=now()""",
+                (user["id"], user.get("email"), display_name))
+        else:
+            db.execute("""INSERT INTO profiles (id, email, display_name) VALUES (?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET email=excluded.email,
+                display_name=excluded.display_name, updated_at=datetime('now')""",
+                (user["id"], user.get("email"), display_name))
+        db.commit()
+    row = db.execute("SELECT id, email, display_name, created_at, updated_at FROM profiles WHERE id = ?", (user["id"],)).fetchone()
+    if not row:
+        if db_pg.is_postgres_configured():
+            db.execute("INSERT INTO profiles (id, email) VALUES (?, ?) ON CONFLICT (id) DO NOTHING", (user["id"], user.get("email")))
+        else:
+            db.execute("INSERT OR IGNORE INTO profiles (id, email) VALUES (?, ?)", (user["id"], user.get("email")))
+        db.commit()
+        row = db.execute("SELECT id, email, display_name, created_at, updated_at FROM profiles WHERE id = ?", (user["id"],)).fetchone()
+    return jsonify(dict(row))
 
 
 # --------------------------------------------------------------------------- #
