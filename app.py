@@ -433,6 +433,7 @@ def index():
 
 @app.route("/api/purchases", methods=["GET"])
 def list_purchases():
+    user = require_user()
     db = get_db()
     rows = db.execute(
         "SELECT * FROM purchases WHERE user_id = ? ORDER BY purchased_on DESC, id DESC"
@@ -442,6 +443,7 @@ def list_purchases():
 
 @app.route("/api/purchases", methods=["POST"])
 def add_purchase():
+    user = require_user()
     data = request.get_json(force=True)
     name = (data.get("name") or "").strip()
     price = data.get("price")
@@ -458,8 +460,8 @@ def add_purchase():
 
     db = get_db()
     cur = db.execute(
-        "INSERT INTO purchases (name, price, purchased_on, created_at) VALUES (?, ?, ?, ?)",
-        (name, price, purchased_on, datetime.utcnow().isoformat()),
+        "INSERT INTO purchases (name, price, purchased_on, created_at, user_id) VALUES (?, ?, ?, ?, ?)",
+        (name, price, purchased_on, datetime.utcnow().isoformat(), user["id"]),
     )
     db.commit()
     new_row = db.execute("SELECT * FROM purchases WHERE id = ? AND user_id = ?", (cur.lastrowid, user["id"])).fetchone()
@@ -468,6 +470,7 @@ def add_purchase():
 
 @app.route("/api/purchases/<int:purchase_id>", methods=["DELETE"])
 def delete_purchase(purchase_id):
+    user = require_user()
     db = get_db()
     db.execute("DELETE FROM purchases WHERE id = ? AND user_id = ?", (purchase_id, user["id"]))
     db.commit()
