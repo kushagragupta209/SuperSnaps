@@ -349,6 +349,7 @@ def auth_me():
 
 def _ensure_user_columns_sqlite(db):
     """Add nullable ownership columns without changing existing records."""
+    db.execute("CREATE TABLE IF NOT EXISTS telegram_user_links (chat_id INTEGER PRIMARY KEY, user_id TEXT NOT NULL)")
     for table in ("purchases", "settings", "monthly_expenses", "wishlist", "day_expenses", "flights"):
         columns = {r[1] for r in db.execute(f"PRAGMA table_info({table})").fetchall()}
         if "user_id" not in columns:
