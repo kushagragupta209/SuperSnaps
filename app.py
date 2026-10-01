@@ -1788,6 +1788,35 @@ def evaluate_wishlist_deal():
 # --------------------------------------------------------------------------- #
 
 @app.route("/api/chat", methods=["POST"])
+def _scope_financial_sql(sql, user_id):
+    """Restrict chatbot SELECTs to the authenticated user's financial rows."""
+    clean = (sql or "").strip()
+    if not clean or ";" in clean or "--" in clean or "/*" in clean:
+        return None
+    lowered = clean.lower()
+    if any(token in lowered for token in (" join ", " union ", " intersect ", " except ")):
+        return None
+    tables = ("purchases", "monthly_expenses", "day_expenses", "wishlist", "settings", "flights")
+    for table in tables:
+        pattern = rf"\\bfrom\\s+{table}\\b"
+        if not re.search(pattern, lowered):
+            continue
+        def inject(match):
+            tail = match.group(0)
+            return tail
+        # Require a user_id predicate for every financial table reference.
+        if not re.search(rf"\\bfrom\\s+{table}\\b[\\s\\S]*?\\buser_id\\s*=", lowered):
+            if re.search(rf"\\bfrom\\s+{table}\\b\\s+where\\b", lowered):
+                clean = re.sub(rf"(\\bfrom\\s+{table}\\b\\s+where\\b)", rf"\\1 user_id = '{user_id}' AND ", clean, flags=re.IGNORECASE)
+            elif re.search(rf"\\bfrom\\s+{table}\\b\\s+(group\\s+by|order\\s+by|limit)\\b", lowered):
+                clean = re.sub(rf"(\\bfrom\\s+{table}\\b)", rf"\\1 WHERE user_id = '{user_id}'", clean, count=1, flags=re.IGNORECASE)
+            elif re.search(rf"\\bfrom\\s+{table}\\b\\s*$", lowered):
+                clean = re.sub(rf"(\\bfrom\\s+{table}\\b)", rf"\\1 WHERE user_id = '{user_id}'", clean, count=1, flags=re.IGNORECASE)
+            else:
+                return None
+    return clean
+
+
 def financial_chat():
     user = require_user()
     data = request.get_json(force=True)
@@ -1810,6 +1839,7 @@ def financial_chat():
         return jsonify({"reply": parsed["direct_reply"], "sql": None, "data": []})
 
     sql = parsed.get("sql")
+    sql = _scope_financial_sql(sql, user["id"])
     # Security barrier: enforce read-only SELECT statements
     clean_sql = sql.strip().lower() if sql else ""
     if not clean_sql.startswith("select") or any(bad in clean_sql for bad in ["insert", "update", "delete", "drop", "alter", "attach", "exec"]):
