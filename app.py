@@ -1749,7 +1749,7 @@ def spend_cutter_plan():
     today = date.today()
     month_purchases, fixed_total, fixed_expenses = _month_spend(db, today.year, today.month, user["id"])
     
-    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary'").fetchone()
+    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user["id"],)).fetchone()
     salary = float(salary_row["value"]) if salary_row else None
     
     savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent' AND user_id = ?", (user["id"],)).fetchone()
@@ -1818,7 +1818,6 @@ def evaluate_wishlist_deal():
 # Routes — API: Natural Language Financial Chatbot
 # --------------------------------------------------------------------------- #
 
-@app.route("/api/chat", methods=["POST"])
 def _scope_financial_sql(sql, user_id):
     """Restrict chatbot SELECTs to the authenticated user's financial rows."""
     clean = (sql or "").strip()
@@ -1838,9 +1837,9 @@ def _scope_financial_sql(sql, user_id):
         # Require a user_id predicate for every financial table reference.
         if not re.search(rf"\bfrom\s+{table}\b[\s\S]*?\buser_id\s*=", lowered):
             if re.search(rf"\bfrom\s+{table}\b\s+where\b", lowered):
-                clean = re.sub(rf"(\bfrom\s+{table}\b\s+where\b)", rf"\\1 user_id = '{user_id}' AND ", clean, flags=re.IGNORECASE)
+                clean = re.sub(rf"(\bfrom\s+{table}\b\s+where\b)", rf"\1 user_id = '{user_id}' AND ", clean, flags=re.IGNORECASE)
             elif re.search(rf"\bfrom\s+{table}\b\s+(group\s+by|order\s+by|limit)\b", lowered):
-                clean = re.sub(rf"(\bfrom\s+{table}\b)", rf"\\1 WHERE user_id = '{user_id}'", clean, count=1, flags=re.IGNORECASE)
+                clean = re.sub(rf"(\bfrom\s+{table}\b)", rf"\1 WHERE user_id = '{user_id}'", clean, count=1, flags=re.IGNORECASE)
             elif re.search(rf"\bfrom\s+{table}\b\s*$", lowered):
                 clean = re.sub(rf"(\bfrom\s+{table}\b)", rf"\\1 WHERE user_id = '{user_id}'", clean, count=1, flags=re.IGNORECASE)
             else:
@@ -1848,6 +1847,7 @@ def _scope_financial_sql(sql, user_id):
     return clean
 
 
+@app.route("/api/chat", methods=["POST"])
 def financial_chat():
     user = require_user()
     data = request.get_json(force=True)
