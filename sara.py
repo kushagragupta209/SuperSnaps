@@ -348,6 +348,7 @@ def _execute_tool(client, name, args, telegram_chat_id=None, access_token=None):
 
     path = spec["path"]
     try:
+        headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
         for key in re.findall(r"\{(\w+)\}", path):
             if key not in args:
                 return {"error": f"Missing required '{key}' for {name}."}
@@ -360,11 +361,11 @@ def _execute_tool(client, name, args, telegram_chat_id=None, access_token=None):
 
     try:
         if method == "GET":
-            resp = client.get(path, query_string={k: str(v) for k, v in args.items()})
+            resp = client.get(path, query_string={k: str(v) for k, v in args.items()}, headers=headers)
         elif method == "DELETE":
-            resp = client.delete(path)
+            resp = client.delete(path, headers=headers)
         else:
-            resp = client.post(path, json=body)
+            resp = client.post(path, json=body, headers=headers)
         return {"status": resp.status_code, "data": resp.get_json(silent=True)}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Tool call failed: {exc}"}
