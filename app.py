@@ -97,8 +97,11 @@ def _init_db_sqlite():
         );
 
         CREATE TABLE IF NOT EXISTS settings (
-            key   TEXT PRIMARY KEY,
-            value TEXT
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT,
+            key     TEXT NOT NULL,
+            value   TEXT,
+            UNIQUE(user_id, key)
         );
 
         -- One row per (year, month) holding the parsed recurring-expense
@@ -350,11 +353,29 @@ def _ensure_user_columns_sqlite(db):
         columns = {r[1] for r in db.execute(f"PRAGMA table_info({table})").fetchall()}
         if "user_id" not in columns:
             db.execute(f"ALTER TABLE {table} ADD COLUMN user_id TEXT")
-    # SQLite originally used key as the primary key. Rebuild settings so each
-    # account can have its own copy of monthly_salary/profile/etc.
-    cols = {r[1] for r in db.execute("PRAGMA table_info(settings)").fetchall()}
-    if "user_id" in cols:
-        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_settings_user_key ON settings(user_id, key)")
+    # Older SQLite databases used key as the primary key. Rebuild that table
+    # once so identical setting keys can exist for different accounts.
+    settings_info = db.execute("PRAGMA table_info(settings)").fetchall()
+    key_is_primary = any(r[1] == "key" and r[5] == 1 for r in settings_info)
+    if key_is_primary:
+        db.execute("DROP TABLE IF EXISTS settings_new")
+        db.execute("""
+            CREATE TABLE settings_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                key TEXT NOT NULL,
+                value TEXT,
+                UNIQUE(user_id, key)
+            )
+        """)
+        has_user_id = any(r[1] == "user_id" for r in settings_info)
+        if has_user_id:
+            db.execute("INSERT INTO settings_new (user_id, key, value) SELECT user_id, key, value FROM settings")
+        else:
+            db.execute("INSERT INTO settings_new (key, value) SELECT key, value FROM settings")
+        db.execute("DROP TABLE settings")
+        db.execute("ALTER TABLE settings_new RENAME TO settings")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_settings_user_key ON settings(user_id, key)")
     db.commit()
 
 
