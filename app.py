@@ -991,7 +991,7 @@ def manual_wishlist_price(item_id):
     except (TypeError, ValueError):
         return jsonify({"error": "Price must be a positive number."}), 400
     db = get_db()
-    item = db.execute("SELECT * FROM wishlist WHERE id = ?", (item_id,)).fetchone()
+    item = db.execute("SELECT * FROM wishlist WHERE id = ? AND user_id = ?", (item_id, user["id"])).fetchone()
     if not item:
         return jsonify({"error": "Wishlist item not found."}), 404
     now = datetime.utcnow().isoformat()
