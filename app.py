@@ -1191,6 +1191,7 @@ def check_flight_fare_by_details():
 
 @app.route("/api/flights/<int:flight_id>/check", methods=["POST"])
 def check_flight_fare(flight_id):
+    user = require_user()
     db = get_db()
     flight = db.execute("SELECT * FROM flights WHERE id = ? AND user_id = ?", (flight_id, user["id"])).fetchone()
     if not flight:
@@ -1231,6 +1232,7 @@ def check_flight_fare(flight_id):
 
 @app.route("/api/flights/<int:flight_id>/history", methods=["GET"])
 def flight_price_history(flight_id):
+    user = require_user()
     db = get_db()
     flight = db.execute("SELECT * FROM flights WHERE id = ?", (flight_id,)).fetchone()
     if not flight:
