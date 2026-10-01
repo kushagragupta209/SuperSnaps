@@ -1678,8 +1678,8 @@ def safe_to_spend():
     # 3. Monthly expenses and purchases
     month_prefix = f"{today.year:04d}-{today.month:02d}"
     purchases_total = db.execute(
-        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ?",
-        (f"{month_prefix}%",),
+        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
+        (f"{month_prefix}%", user["id"]),
     ).fetchone()["s"]
 
     fixed_total = db.execute(
@@ -1807,7 +1807,7 @@ def evaluate_wishlist_deal():
     db = get_db()
     today = date.today()
     month_purchases, fixed_total, _ = _month_spend(db, today.year, today.month, user["id"])
-    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary'").fetchone()
+    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user["id"],)).fetchone()
     salary = float(salary_row["value"]) if salary_row else 0
     monthly_savings = max(0.0, salary - fixed_total - month_purchases)
 
