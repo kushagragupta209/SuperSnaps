@@ -423,8 +423,8 @@ def require_user():
 
 # Ownership columns are nullable during migration so existing single-user
 # records remain intact until they are explicitly assigned to an account.
-ensure_user_columns()
-
+with app.app_context():
+    ensure_user_columns()
 
 @app.route("/api/profile", methods=["GET", "POST"])
 def profile():
