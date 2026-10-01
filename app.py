@@ -926,7 +926,7 @@ def wishlist_price_history(item_id):
 def refresh_wishlist_price(item_id):
     user = require_user()
     db = get_db()
-    item = db.execute("SELECT * FROM wishlist WHERE id = ?", (item_id,)).fetchone()
+    item = db.execute("SELECT * FROM wishlist WHERE id = ? AND user_id = ?", (item_id, user["id"])).fetchone()
     if not item:
         return jsonify({"error": "Wishlist item not found."}), 404
     if not item["product_url"]:
@@ -1161,7 +1161,7 @@ def check_flight_fare_by_details():
 @app.route("/api/flights/<int:flight_id>/check", methods=["POST"])
 def check_flight_fare(flight_id):
     db = get_db()
-    flight = db.execute("SELECT * FROM flights WHERE id = ?", (flight_id,)).fetchone()
+    flight = db.execute("SELECT * FROM flights WHERE id = ? AND user_id = ?", (flight_id, user["id"])).fetchone()
     if not flight:
         return jsonify({"error": "Flight tracker not found."}), 404
 
@@ -1234,8 +1234,8 @@ def _expense_budget_snapshot(db, expense_date=None, user_id=None):
 
     month_prefix = f"{expense_day.year:04d}-{expense_day.month:02d}"
     purchases_total = db.execute(
-        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ?",
-        (f"{month_prefix}%",),
+        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
+        (f"{month_prefix}%", user["id"]),
     ).fetchone()["s"]
     fixed_total = db.execute(
         "SELECT COALESCE(SUM(amount), 0) AS s FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ?",
@@ -1587,8 +1587,8 @@ def summary():
     ).fetchone()["s"]
 
     fixed_rows = db.execute(
-        "SELECT category, amount FROM monthly_expenses WHERE year = ? AND month = ? ORDER BY amount DESC",
-        (year, month),
+        "SELECT category, amount FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ? ORDER BY amount DESC",
+        (year, month, user["id"]),
     ).fetchall()
     fixed_total = sum(r["amount"] for r in fixed_rows)
 
@@ -1634,7 +1634,7 @@ def safe_to_spend():
     today = date.today()
     
     # 1. Fetch salary & savings target
-    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary'").fetchone()
+    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user["id"],)).fetchone()
     salary = float(salary_row["value"]) if salary_row else None
 
     savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent' AND user_id = ?", (user["id"],)).fetchone()
@@ -1652,14 +1652,14 @@ def safe_to_spend():
     ).fetchone()["s"]
 
     fixed_total = db.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS s FROM monthly_expenses WHERE year = ? AND month = ?",
+        "SELECT COALESCE(SUM(amount), 0) AS s FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ?",
         (today.year, today.month, user["id"]),
     ).fetchone()["s"]
 
     # Also count day_expenses (manual entries + Telegram sync) for this month
     day_spend_total = db.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS s FROM day_expenses WHERE date LIKE ?",
-        (f"{month_prefix}%",),
+        "SELECT COALESCE(SUM(amount), 0) AS s FROM day_expenses WHERE date LIKE ? AND user_id = ?",
+        (f"{month_prefix}%", user["id"]),
     ).fetchone()["s"]
 
     discretionary_spent = purchases_total + day_spend_total
@@ -1682,12 +1682,12 @@ def safe_to_spend():
     # actual spending today rather than a flat unadjusted daily average.
     today_str = today.isoformat()
     purchases_today = db.execute(
-        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on = ?",
+        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on = ? AND user_id = ?",
         (today_str, user["id"]),
     ).fetchone()["s"]
     day_expenses_today = db.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS s FROM day_expenses WHERE date = ?",
-        (today_str,),
+        "SELECT COALESCE(SUM(amount), 0) AS s FROM day_expenses WHERE date = ? AND user_id = ?",
+        (today_str, user["id"]),
     ).fetchone()["s"]
     spent_today = round(purchases_today + day_expenses_today, 2)
     today_left = round(daily_safe_budget - spent_today, 2)  # can go negative if today's overspent — that's meaningful, not clamped
@@ -1721,7 +1721,7 @@ def spend_cutter_plan():
     salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary'").fetchone()
     salary = float(salary_row["value"]) if salary_row else None
     
-    savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent'").fetchone()
+    savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent' AND user_id = ?", (user["id"],)).fetchone()
     savings_pct = float(savings_row["value"]) if savings_row else agent.DEFAULT_SAVINGS_PERCENT
     
     current_savings = max(0.0, (salary - fixed_total - month_purchases)) if salary else 0.0
