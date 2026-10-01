@@ -1945,6 +1945,10 @@ def telegram_sara():
 
     db = get_db()
     chat_id = int(chat_id)
+    link = db.execute("SELECT user_id FROM telegram_user_links WHERE chat_id = ?", (chat_id,)).fetchone()
+    if not link:
+        return jsonify({"error": "This Telegram chat is not linked to a Ledger account."}), 403
+    linked_user_id = link["user_id"]
 
     # Reuse the same conversation format as the web client: user/assistant
     # messages only. Keep the window bounded so prompts do not grow forever.
@@ -1955,7 +1959,7 @@ def telegram_sara():
     ).fetchall()
     history = [dict(r) for r in reversed(rows)]
 
-    result = sara.run_sara(message, app.test_client(), history, channel="telegram", telegram_chat_id=chat_id)
+    result = sara.run_sara(message, app.test_client(), history, channel="telegram", telegram_chat_id=chat_id, internal_user_id=linked_user_id)
 
     # Persist the turn after Sara has generated its response. The Telegram
     # message id is retained for traceability/deduplication diagnostics.
