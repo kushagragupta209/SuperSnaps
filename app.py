@@ -1592,7 +1592,7 @@ def summary():
     ).fetchall()
     fixed_total = sum(r["amount"] for r in fixed_rows)
 
-    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary'").fetchone()
+    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user["id"],)).fetchone()
     salary = float(salary_row["value"]) if salary_row else None
 
     def pct(part, whole):
@@ -1637,7 +1637,7 @@ def safe_to_spend():
     salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary'").fetchone()
     salary = float(salary_row["value"]) if salary_row else None
 
-    savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent'").fetchone()
+    savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent' AND user_id = ?", (user["id"],)).fetchone()
     savings_pct = float(savings_row["value"]) if savings_row else agent.DEFAULT_SAVINGS_PERCENT
 
     # 2. Total days & days left in month (including today)
@@ -1713,9 +1713,10 @@ def safe_to_spend():
 
 @app.route("/api/agents/spend-cutter/plan", methods=["GET"])
 def spend_cutter_plan():
+    user = require_user()
     db = get_db()
     today = date.today()
-    month_purchases, fixed_total, fixed_expenses = _month_spend(db, today.year, today.month)
+    month_purchases, fixed_total, fixed_expenses = _month_spend(db, today.year, today.month, user["id"])
     
     salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary'").fetchone()
     salary = float(salary_row["value"]) if salary_row else None
@@ -1740,6 +1741,7 @@ def spend_cutter_plan():
 
 @app.route("/api/agents/spend-cutter/apply", methods=["POST"])
 def spend_cutter_apply():
+    user = require_user()
     """Applies the agent's rebalanced fixed expense targets into monthly_expenses."""
     data = request.get_json(force=True)
     rebalanced = data.get("rebalanced_fixed_expenses") or []
@@ -1754,8 +1756,8 @@ def spend_cutter_apply():
         new_amt = float(item.get("proposed_amount", 0))
         if cat and new_amt > 0:
             db.execute(
-                "UPDATE monthly_expenses SET amount = ? WHERE year = ? AND month = ? AND LOWER(category) = LOWER(?)",
-                (new_amt, today.year, today.month, cat)
+                "UPDATE monthly_expenses SET amount = ? WHERE year = ? AND month = ? AND LOWER(category) = LOWER(?) AND user_id = ?",
+                (new_amt, today.year, today.month, cat, user["id"])
             )
     db.commit()
     return jsonify({"status": "applied", "updated_count": len(rebalanced)}), 200
@@ -1763,6 +1765,7 @@ def spend_cutter_apply():
 
 @app.route("/api/agents/deal-evaluator", methods=["POST"])
 def evaluate_wishlist_deal():
+    user = require_user()
     data = request.get_json(force=True)
     name = (data.get("name") or "").strip()
     price = float(data.get("price") or 0)
@@ -1772,7 +1775,7 @@ def evaluate_wishlist_deal():
 
     db = get_db()
     today = date.today()
-    month_purchases, fixed_total, _ = _month_spend(db, today.year, today.month)
+    month_purchases, fixed_total, _ = _month_spend(db, today.year, today.month, user["id"])
     salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary'").fetchone()
     salary = float(salary_row["value"]) if salary_row else 0
     monthly_savings = max(0.0, salary - fixed_total - month_purchases)
@@ -1786,6 +1789,7 @@ def evaluate_wishlist_deal():
 
 @app.route("/api/chat", methods=["POST"])
 def financial_chat():
+    user = require_user()
     data = request.get_json(force=True)
     message = (data.get("message") or "").strip()
     if not message:
@@ -1796,7 +1800,7 @@ def financial_chat():
     if not parsed:
         # Fallback simple search across purchases and expenses
         db = get_db()
-        rows = db.execute("SELECT * FROM purchases ORDER BY purchased_on DESC LIMIT 5").fetchall()
+        rows = db.execute("SELECT * FROM purchases WHERE user_id = ? ORDER BY purchased_on DESC LIMIT 5", (user["id"],)).fetchall()
         return jsonify({
             "reply": "I couldn't run a deep SQL search, but here are your 5 most recent purchases.",
             "data": [dict(r) for r in rows]
