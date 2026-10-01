@@ -68,3 +68,12 @@ end $;
 
 create policy if not exists profiles_update_own on profiles
     for update using (auth.uid() = id) with check (auth.uid() = id);
+
+
+-- Map each Telegram chat to exactly one signed-in Ledger account.
+create table if not exists telegram_user_links (
+    chat_id bigint primary key,
+    user_id uuid not null references auth.users(id) on delete cascade,
+    linked_at timestamptz not null default now()
+);
+alter table telegram_user_links enable row level security;
