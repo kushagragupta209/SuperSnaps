@@ -1234,7 +1234,7 @@ def check_flight_fare(flight_id):
 def flight_price_history(flight_id):
     user = require_user()
     db = get_db()
-    flight = db.execute("SELECT * FROM flights WHERE id = ?", (flight_id,)).fetchone()
+    flight = db.execute("SELECT * FROM flights WHERE id = ? AND user_id = ?", (flight_id, user["id"])).fetchone()
     if not flight:
         return jsonify({"error": "Flight tracker not found."}), 404
     rows = db.execute(
