@@ -1285,10 +1285,10 @@ def _expense_budget_snapshot(db, expense_date=None, user_id=None):
     categories = db.execute(
         "SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') AS category, "
         "COALESCE(SUM(amount), 0) AS amount "
-        "FROM day_expenses WHERE date LIKE ? "
+        "FROM day_expenses WHERE date LIKE ? AND user_id = ? "
         "GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') "
         "ORDER BY amount DESC",
-        (f"{month_prefix}%",),
+        (f"{month_prefix}%", user_id),
     ).fetchall()
     category_totals = [
         {"category": row["category"], "amount": round(float(row["amount"] or 0), 2)}
