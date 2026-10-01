@@ -620,7 +620,7 @@ def insights():
 
     ytd_purchases = db.execute(
         "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
-        (f"{today.year:04d}-%", user["id"]),,
+        (f"{today.year:04d}-%", user["id"]),
     ).fetchone()["s"]
 
     # Last 6 months including the current one, oldest first.
@@ -1399,7 +1399,7 @@ def day_expense_categories():
         "SELECT category, COALESCE(SUM(amount), 0) AS amount "
         "FROM day_expenses WHERE date LIKE ? AND user_id = ? "
         "GROUP BY category ORDER BY amount DESC",
-        (f"{month_prefix}%", user["id"]),,
+        (f"{month_prefix}%", user["id"]),
     ).fetchall()
     totals = {row["category"]: round(float(row["amount"] or 0), 2) for row in rows}
     categories = getattr(agent, "DAY_EXPENSE_CATEGORIES", ["Other"])
@@ -1424,7 +1424,7 @@ def list_day_expenses():
     db = get_db()
     rows = db.execute(
         "SELECT * FROM day_expenses WHERE date LIKE ? AND user_id = ? ORDER BY date DESC, id DESC",
-        (f"{month_prefix}%", user["id"]),,
+        (f"{month_prefix}%", user["id"]),
     ).fetchall()
     items = [dict(r) for r in rows]
 
@@ -1611,12 +1611,12 @@ def summary():
     month_prefix = f"{year:04d}-{month:02d}"
     month_purchases = db.execute(
         "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
-        (f"{month_prefix}%", user["id"]),,
+        (f"{month_prefix}%", user["id"]),
     ).fetchone()["s"]
 
     ytd_purchases = db.execute(
         "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
-        (f"{year:04d}-%", user["id"]),,
+        (f"{year:04d}-%", user["id"]),
     ).fetchone()["s"]
 
     fixed_rows = db.execute(
