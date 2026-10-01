@@ -1870,7 +1870,7 @@ def sara_chat():
     if not message:
         return jsonify({"error": "Empty message."}), 400
 
-    result = sara.run_sara(message, app.test_client(), history)
+    result = sara.run_sara(message, app.test_client(), history, access_token=auth.get_bearer_token(request))
     return jsonify(result)
 
 
