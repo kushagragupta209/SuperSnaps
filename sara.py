@@ -318,7 +318,7 @@ Rules:
 # Tool execution
 # --------------------------------------------------------------------------- #
 
-def _execute_tool(client, name, args, telegram_chat_id=None, access_token=None):
+def _execute_tool(client, name, args, telegram_chat_id=None, access_token=None, internal_user_id=None):
     """Run one tool call against the Flask app's own routes via test_client()."""
     spec = TOOL_SPECS.get(name)
     if not spec:
@@ -349,6 +349,9 @@ def _execute_tool(client, name, args, telegram_chat_id=None, access_token=None):
     path = spec["path"]
     try:
         headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
+        if internal_user_id:
+            headers["X-Telegram-User-Id"] = internal_user_id
+            headers["X-Telegram-Sara-Secret"] = os.environ.get("TELEGRAM_SARA_SECRET", "")
         for key in re.findall(r"\{(\w+)\}", path):
             if key not in args:
                 return {"error": f"Missing required '{key}' for {name}."}
@@ -375,7 +378,7 @@ def _execute_tool(client, name, args, telegram_chat_id=None, access_token=None):
 # Public entry point
 # --------------------------------------------------------------------------- #
 
-def run_sara(message: str, client, history=None, max_iterations: int = 4, channel: str = "web", telegram_chat_id=None, access_token=None):
+def run_sara(message: str, client, history=None, max_iterations: int = 4, channel: str = "web", telegram_chat_id=None, access_token=None, internal_user_id=None):
     """
     Orchestrate one turn of the supervisor agent: send the message (plus any
     prior user/assistant turns in `history`) to Groq with the tool schema,
@@ -440,7 +443,7 @@ Telegram presentation:
                 except json.JSONDecodeError:
                     fn_args = {}
 
-                result = _execute_tool(client, fn_name, fn_args, telegram_chat_id=telegram_chat_id, access_token=access_token)
+                result = _execute_tool(client, fn_name, fn_args, telegram_chat_id=telegram_chat_id, access_token=access_token, internal_user_id=internal_user_id)
                 actions.append({
                     "tool": fn_name,
                     "args": {k: v for k, v in fn_args.items() if k != "confirmed"},
