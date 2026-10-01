@@ -400,8 +400,17 @@ def current_user():
     """Return the Supabase user represented by this request's Bearer token."""
     if hasattr(g, "current_user"):
         return g.current_user
-    g.current_user = auth.get_user_from_token(auth.get_bearer_token(request))
-    return g.current_user
+    token_user = auth.get_user_from_token(auth.get_bearer_token(request))
+    if token_user:
+        g.current_user = token_user
+        return g.current_user
+    internal_user_id = request.headers.get("X-Telegram-User-Id")
+    internal_secret = request.headers.get("X-Telegram-Sara-Secret")
+    if internal_user_id and os.environ.get("TELEGRAM_SARA_SECRET") == internal_secret:
+        g.current_user = {"id": internal_user_id, "email": None}
+        return g.current_user
+    g.current_user = None
+    return None
 
 
 def require_user():
