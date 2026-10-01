@@ -1578,7 +1578,7 @@ def get_monthly_expenses():
     month = request.args.get("month", type=int, default=date.today().month)
     db = get_db()
     rows = db.execute(
-        "SELECT * FROM monthly_expenses WHERE year = ? AND month = ? ORDER BY amount DESC",
+        "SELECT * FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ? ORDER BY amount DESC",
         (year, month, user["id"]),
     ).fetchall()
     return jsonify([dict(r) for r in rows])
@@ -1608,13 +1608,13 @@ def summary():
 
     month_prefix = f"{year:04d}-{month:02d}"
     month_purchases = db.execute(
-        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ?",
-        (f"{month_prefix}%",),
+        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
+        (f"{month_prefix}%", user["id"]),,
     ).fetchone()["s"]
 
     ytd_purchases = db.execute(
-        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ?",
-        (f"{year:04d}-%",),
+        "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
+        (f"{year:04d}-%", user["id"]),,
     ).fetchone()["s"]
 
     fixed_rows = db.execute(
