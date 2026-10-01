@@ -1904,6 +1904,23 @@ def sara_chat():
     return jsonify(result)
 
 
+@app.route("/api/telegram/link", methods=["POST"])
+def telegram_link():
+    user = require_user()
+    data = request.get_json(force=True)
+    chat_id = data.get("chat_id")
+    if chat_id is None:
+        return jsonify({"error": "chat_id is required."}), 400
+    db = get_db()
+    db.execute(
+        "INSERT INTO telegram_user_links (chat_id, user_id) VALUES (?, ?) "
+        "ON CONFLICT(chat_id) DO UPDATE SET user_id = excluded.user_id",
+        (int(chat_id), user["id"]),
+    )
+    db.commit()
+    return jsonify({"linked": True}), 200
+
+
 @app.route("/api/telegram/sara", methods=["POST"])
 def telegram_sara():
     """
