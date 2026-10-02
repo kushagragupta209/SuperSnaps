@@ -1538,15 +1538,25 @@ function renderPreview(items, source){
 document.getElementById('saveExpenseBtn').onclick = async () => {
   const text = document.getElementById('expenseInput').value.trim();
   if (!text) return;
+  const btn = document.getElementById('saveExpenseBtn');
   const now = new Date();
-  const r = await fetch('/api/monthly-expenses', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({text, year: now.getFullYear(), month: now.getMonth()+1})
-  });
-  const d = await r.json();
-  if (!r.ok) { alert(d.error || 'Could not parse that.'); return; }
-  renderPreview(d.items, d.source);
-  refreshAll();
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const r = await authFetch('/api/monthly-expenses', {
+      method:'POST',
+      body: JSON.stringify({text, year: now.getFullYear(), month: now.getMonth()+1})
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Could not save that.');
+    renderPreview(d.items, d.source);
+    await refreshAll();
+  } catch (e) {
+    alert(e.message || 'Could not save that.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save to this month';
+  }
 };
 
 /* ---------- Timeline & Purchases ---------- */
