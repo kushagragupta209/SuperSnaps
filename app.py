@@ -1851,7 +1851,7 @@ def _scope_financial_sql(sql, user_id):
             elif re.search(rf"\bfrom\s+{table}\b\s+(group\s+by|order\s+by|limit)\b", lowered):
                 clean = re.sub(rf"(\bfrom\s+{table}\b)", rf"\1 WHERE user_id = '{user_id}'", clean, count=1, flags=re.IGNORECASE)
             elif re.search(rf"\bfrom\s+{table}\b\s*$", lowered):
-                clean = re.sub(rf"(\bfrom\s+{table}\b)", rf"\\1 WHERE user_id = '{user_id}'", clean, count=1, flags=re.IGNORECASE)
+                clean = re.sub(rf"(\bfrom\s+{table}\b)", rf"\1 WHERE user_id = '{user_id}'", clean, count=1, flags=re.IGNORECASE)
             else:
                 return None
     return clean
