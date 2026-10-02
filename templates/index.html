@@ -1046,10 +1046,46 @@ async function initAuth(){
   return state.authenticated;
 }
 let authMode='signin';
-document.getElementById('authToggle').onclick=()=>{
-authMode=authMode==='signin'?'signup':'signin';document.getElementById('authTitle').textContent=authMode==='signin'?'Welcome back':'Create your account';document.getElementById('authSubmit').textContent=authMode==='signin'?'Sign In':'Create Account';document.getElementById('authToggle').textContent=authMode==='signin'?'Create an account':'Back to sign in';document.getElementById('authError').textContent=''};
-document.getElementById('authSubmit').onclick=async()=>{if(!authReady){const state=window.__snapsAuth;if(state.client){supabaseClient=state.client;authReady=state.ready;authRequired=state.required;}}if(!authReady){document.getElementById('authError').textContent='Authentication is still initializing. Please try again in a moment.';return}if(!supabaseClient){document.getElementById('authError').textContent='Authentication is not configured. Check the Supabase settings.';return}const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value,error=document.getElementById('authError');if(!email||!password){error.textContent='Enter both email and password.';return}const x=authMode==='signin'?await supabaseClient.auth.signInWithPassword({email,password}):await supabaseClient.auth.signUp({email,password});if(x.error){error.textContent=x.error.message;return}error.textContent=authMode==='signup'&&!x.data.session?'Account created. Check your email to confirm it, then sign in.':''};
-\nconst CHART_COLORS = ['#39734c','#c9a24b','#b5482f','#6c8ebf','#8892a6','#a06cd5','#4fb0a5','#d68f4f'];
+function setupAuthControls(){
+  const submit=document.getElementById('authSubmit'),toggle=document.getElementById('authToggle');
+  const emailInput=document.getElementById('authEmail'),passwordInput=document.getElementById('authPassword'),error=document.getElementById('authError');
+  if(!submit||!toggle||!emailInput||!passwordInput||!error) return false;
+  toggle.onclick=()=>{
+    authMode=authMode==='signin'?'signup':'signin';
+    document.getElementById('authTitle').textContent=authMode==='signin'?'Welcome back':'Create your account';
+    submit.textContent=authMode==='signin'?'Sign In':'Create Account';
+    toggle.textContent=authMode==='signin'?'Create an account':'Back to sign in';
+    error.textContent='';
+  };
+  submit.onclick=async()=>{
+    error.textContent='';
+    const state=window.__snapsAuth;
+    if(state?.client) supabaseClient=state.client;
+    authReady=!!state?.ready;
+    authRequired=!!state?.required;
+    if(!authReady||!supabaseClient){error.textContent='Authentication is still initializing. Please wait a moment and try again.';return;}
+    const email=emailInput.value.trim(),password=passwordInput.value;
+    if(!email||!password){error.textContent='Enter both email and password.';return;}
+    submit.disabled=true;
+    submit.textContent=authMode==='signin'?'Signing in…':'Creating account…';
+    try{
+      const result=authMode==='signin'
+        ? await supabaseClient.auth.signInWithPassword({email,password})
+        : await supabaseClient.auth.signUp({email,password});
+      if(result.error){error.textContent=result.error.message||'Authentication failed. Please try again.';return;}
+      if(authMode==='signup'&&!result.data.session) error.textContent='Account created. Check your email to confirm it, then sign in.';
+    }catch(e){
+      console.error('Authentication request failed:',e);
+      error.textContent=e?.message||'Authentication request failed. Please try again.';
+    }finally{
+      submit.disabled=false;
+      submit.textContent=authMode==='signin'?'Sign In':'Create Account';
+    }
+  };
+  return true;
+}
+if(!setupAuthControls()) document.addEventListener('DOMContentLoaded',setupAuthControls,{once:true});
+const CHART_COLORS = ['#39734c','#c9a24b','#b5482f','#6c8ebf','#8892a6','#a06cd5','#4fb0a5','#d68f4f'];
 const today = new Date();
 document.getElementById('todayLabel').textContent = today.toDateString();
 document.getElementById('prodDate').value = today.toISOString().slice(0,10);
