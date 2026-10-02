@@ -1489,15 +1489,35 @@ function renderChartAndLegend(rows){
 }
 
 /* ---------- Fixed Expense NLP ---------- */
+async function authFetch(url, options = {}) {
+  const state = window.__snapsAuth;
+  if (!state?.client) throw new Error('Authentication is not ready.');
+  const { data, error } = await state.client.auth.getSession();
+  if (error || !data?.session?.access_token) {
+    throw new Error('Please sign in again before using this feature.');
+  }
+  const headers = new Headers(options.headers || {});
+  headers.set('Authorization', `Bearer ${data.session.access_token}`);
+  if (!headers.has('Content-Type') && options.body) headers.set('Content-Type', 'application/json');
+  return fetch(url, { ...options, headers });
+}
+
 document.getElementById('previewBtn').onclick = async () => {
   const text = document.getElementById('expenseInput').value.trim();
   if (!text) return;
-  const r = await fetch('/api/monthly-expenses/parse', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({text})
-  });
-  const d = await r.json();
-  renderPreview(d.parsed, d.source);
+  const box = document.getElementById('parsedPreview');
+  box.innerHTML = '<span class="hint">Parsing with Groq…</span>';
+  try {
+    const r = await authFetch('/api/monthly-expenses/parse', {
+      method:'POST',
+      body: JSON.stringify({text})
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Could not parse that.');
+    renderPreview(d.parsed, d.source);
+  } catch (e) {
+    box.innerHTML = `<span class="hint">${escapeHtml(e.message || 'Could not parse that.')}</span>`;
+  }
 };
 
 function renderPreview(items, source){
