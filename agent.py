@@ -18,6 +18,13 @@ Everything else is an implementation detail of how a given item gets
 import json
 import os
 import re
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load the project's .env from the same directory as this file, regardless of
+# which directory the Flask process was launched from.
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 import db_pg
 
@@ -233,8 +240,11 @@ def parse_expense(text: str):
         (items, source) where source is "groq" or "regex".
     """
     llm_result = _parse_expense_llm(text)
-    if llm_result is not None:
+    if llm_result:
         return llm_result, "groq"
+
+    # If Groq is unavailable or returns an empty/invalid extraction, keep the
+    # deterministic parser as a safety net for simple amount/category phrases.
     return _parse_expense_regex(text), "regex"
 
 
