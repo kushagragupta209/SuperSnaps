@@ -1162,8 +1162,14 @@ async function loadCategorySpending(){
         <strong>${fmt(row.amount)}</strong>
       </div>`).join('');
 
+    if (!window.Chart) {
+      top.textContent = d.top_category
+        ? `Highest spending: ${d.top_category.category} — ${fmt(d.top_category.amount)}`
+        : 'No categorized spending recorded for this month.';
+      return;
+    }
     if(categorySpendingChart) categorySpendingChart.destroy();
-    categorySpendingChart = new Chart(canvas.getContext('2d'),{
+    categorySpendingChart = new window.Chart(canvas.getContext('2d'),{
       type:'doughnut',
       data:{
         labels:rows.map(r=>r.category),
@@ -1477,8 +1483,9 @@ function renderChartAndLegend(rows){
   }
 
   const ctx = document.getElementById('expenseChart');
+  if (!ctx || !window.Chart) return;
   if (chart) chart.destroy();
-  chart = new Chart(ctx, {
+  chart = new window.Chart(ctx, {
     type: 'doughnut',
     data: {
       labels: (rows||[]).map(r => r.category),
