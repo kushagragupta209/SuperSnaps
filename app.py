@@ -1317,7 +1317,7 @@ def _expense_budget_snapshot(db, expense_date=None, user_id=None):
     month_prefix = f"{expense_day.year:04d}-{expense_day.month:02d}"
     purchases_total = db.execute(
         "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
-        (f"{month_prefix}%", user["id"]),
+        (f"{month_prefix}%", user_id),
     ).fetchone()["s"]
     fixed_total = db.execute(
         "SELECT COALESCE(SUM(amount), 0) AS s FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ?",
