@@ -753,7 +753,7 @@ def list_wishlist():
     month_prefix = f"{today.year:04d}-{today.month:02d}"
     month_purchases = db.execute(
         "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
-        (f"{month_prefix}%", user_id),
+        (f"{month_prefix}%", user["id"]),
     ).fetchone()["s"]
     fixed_total = db.execute(
         "SELECT COALESCE(SUM(amount), 0) AS s FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ?",
