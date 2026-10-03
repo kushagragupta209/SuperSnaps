@@ -457,7 +457,7 @@ def migration_status():
 
 @app.route("/api/migration/claim", methods=["POST"])
 def migration_claim():
-    """Claim all currently unowned legacy financial rows for the signed-in user."""
+    """Claim unowned legacy financial rows for the signed-in user."""
     user = require_user()
     data = request.get_json(silent=True) or {}
     if data.get("confirm") is not True:
@@ -469,28 +469,76 @@ def migration_claim():
     db = get_db()
     tables = (
         "purchases",
-        "settings",
         "monthly_expenses",
         "wishlist",
         "day_expenses",
         "flights",
     )
     counts = {}
+    skipped = {}
+
     try:
+        # These tables have no per-user uniqueness constraint, so their
+        # unowned legacy rows can be assigned directly.
         for table in tables:
             cur = db.execute(
                 "UPDATE " + table + " SET user_id = ? WHERE user_id IS NULL",
                 (user["id"],),
             )
             counts[table] = cur.rowcount
+
+        # settings is special: (user_id, key) is unique. If the signed-in
+        # account already has a setting such as monthly_salary, keep that
+        # account value and remove only the duplicate legacy row instead of
+        # aborting the entire migration.
+        conflict_rows = db.execute(
+            """SELECT key FROM settings
+               WHERE user_id IS NULL
+                 AND EXISTS (
+                     SELECT 1 FROM settings owned
+                     WHERE owned.user_id = ? AND owned.key = settings.key
+                 )""",
+            (user["id"],),
+        ).fetchall()
+        skipped["settings_conflicts"] = [row["key"] for row in conflict_rows]
+
+        cur = db.execute(
+            """UPDATE settings
+               SET user_id = ?
+               WHERE user_id IS NULL
+                 AND NOT EXISTS (
+                     SELECT 1 FROM settings owned
+                     WHERE owned.user_id = ? AND owned.key = settings.key
+                 )""",
+            (user["id"], user["id"]),
+        )
+        counts["settings"] = cur.rowcount
+
+        if conflict_rows:
+            db.execute(
+                """DELETE FROM settings
+                   WHERE user_id IS NULL
+                     AND EXISTS (
+                         SELECT 1 FROM settings owned
+                         WHERE owned.user_id = ? AND owned.key = settings.key
+                     )""",
+                (user["id"],),
+            )
+
         db.commit()
     except Exception:
         db.rollback()
         raise
 
+    claimed_total = sum(counts.values())
     return jsonify({
         "claimed": counts,
-        "total": sum(counts.values()),
+        "skipped": skipped,
+        "total": claimed_total,
+        "message": (
+            "Migration completed. Existing account settings were preserved "
+            "where they conflicted with legacy settings."
+        ),
     }), 200
 
 
