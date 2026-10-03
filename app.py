@@ -983,7 +983,7 @@ def refresh_wishlist_price(item_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     now = datetime.utcnow().isoformat()
-    db.execute("UPDATE wishlist SET name = ?, price = ?, platform = ? WHERE id = ?", (product["name"], product["price"], product["platform"], item_id))
+    db.execute("UPDATE wishlist SET name = ?, price = ?, platform = ? WHERE id = ? AND user_id = ?", (product["name"], product["price"], product["platform"], item_id, user["id"]))
     db.execute("INSERT INTO wishlist_price_history (wishlist_id, price, checked_at) VALUES (?, ?, ?)", (item_id, product["price"], now))
     db.commit()
     return jsonify({"name": product["name"], "price": product["price"], "platform": product["platform"]})
@@ -1468,9 +1468,10 @@ def sync_telegram_expenses():
     run — those can be days apart, since this only runs when Ledger is
     launched.
     """
+    user = require_user()
     db = get_db()
     try:
-        pending = telegram_sync.fetch_pending(db)
+        pending = telegram_sync.fetch_pending(db, user["id"])
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception:  # noqa: BLE001 - covers psycopg2 connection/network failures too
@@ -1491,12 +1492,12 @@ def sync_telegram_expenses():
             continue
 
         cur = db.execute(
-            "INSERT INTO day_expenses (date, merchant, category, amount, source, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO day_expenses (date, merchant, category, amount, source, created_at, user_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (parsed["date"], parsed.get("merchant") or "", parsed["category"],
-             parsed["amount"], "telegram", datetime.utcnow().isoformat()),
+             parsed["amount"], "telegram", datetime.utcnow().isoformat(), user["id"]),
         )
-        saved_row = db.execute("SELECT * FROM day_expenses WHERE id = ?", (cur.lastrowid,)).fetchone()
+        saved_row = db.execute("SELECT * FROM day_expenses WHERE id = ? AND user_id = ?", (cur.lastrowid, user["id"])).fetchone()
         saved.append(dict(saved_row))
 
     db.commit()
