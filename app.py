@@ -482,7 +482,8 @@ def list_purchases():
     user = require_user()
     db = get_db()
     rows = db.execute(
-        "SELECT * FROM purchases WHERE user_id = ? ORDER BY purchased_on DESC, id DESC"
+        "SELECT * FROM purchases WHERE user_id = ? ORDER BY purchased_on DESC, id DESC",
+        (user["id"],)
     ).fetchall()
     return jsonify([dict(r) for r in rows])
 
@@ -602,7 +603,7 @@ def _month_spend(db, year, month, user_id):
     month_prefix = f"{year:04d}-{month:02d}"
     purchases_total = db.execute(
         "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
-        (f"{month_prefix}%", user_id),
+        (f"{month_prefix}%", user["id"]),
     ).fetchone()["s"]
     fixed_rows = db.execute(
         "SELECT category, amount FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ? ORDER BY amount DESC",
@@ -644,7 +645,7 @@ def insights():
     salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user["id"],)).fetchone()
     salary = float(salary_row["value"]) if salary_row else None
 
-    savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent' AND user_id = ?", (user_id,)).fetchone()
+    savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent' AND user_id = ?", (user["id"],)).fetchone()
     savings_percent = float(savings_row["value"]) if savings_row else None
 
     context = {
