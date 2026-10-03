@@ -1148,7 +1148,7 @@ async function loadCategorySpending(){
   label.textContent = categorySpendingDate.toLocaleDateString('en-IN',{month:'short',year:'numeric'});
 
   try{
-    const r = await fetch(`/api/day-expenses/categories?year=${year}&month=${month}`);
+    const r = await apiFetch(`/api/day-expenses/categories?year=${year}&month=${month}`);
     const d = await r.json();
     if(!r.ok) throw new Error();
 
@@ -1227,7 +1227,7 @@ async function loadSpentCalendar(){
   grid.innerHTML='';
   ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(x=>{const e=document.createElement('div');e.className='spent-calendar-weekday';e.textContent=x;grid.appendChild(e);});
   try{
-    const r=await fetch(`/api/day-expenses?year=${year}&month=${month}`), d=await r.json(); if(!r.ok)throw new Error();
+    const r=await apiFetch(`/api/day-expenses?year=${year}&month=${month}`), d=await r.json(); if(!r.ok)throw new Error();
     const totals={}; (d.day_totals||[]).forEach(x=>totals[x.date]=Number(x.total||0));
     const first=new Date(year,month-1,1), offset=(first.getDay()+6)%7, days=new Date(year,month,0).getDate();
     const today=new Date(); today.setHours(0,0,0,0); let total=0, count=0;
@@ -1269,7 +1269,7 @@ async function loadSafeToSpend(){
   const poolLabel = document.getElementById('safePoolLabel');
 
   try {
-    const r = await fetch('/api/budget/safe-to-spend');
+    const r = await apiFetch('/api/budget/safe-to-spend');
     const d = await r.json();
 
     if (!d.configured){
@@ -1327,7 +1327,7 @@ document.getElementById('btnRunSpendCutter').onclick = async () => {
   btn.textContent = 'Agent Analyzing Spending...';
 
   try {
-    const r = await fetch('/api/agents/spend-cutter/plan');
+    const r = await apiFetch('/api/agents/spend-cutter/plan');
     const d = await r.json();
     activeCutterPlan = d;
 
@@ -1365,7 +1365,7 @@ document.getElementById('btnRunSpendCutter').onclick = async () => {
 
 document.getElementById('btnApplyCutterPlan').onclick = async () => {
   if (!activeCutterPlan || !activeCutterPlan.rebalanced_fixed_expenses) return;
-  const r = await fetch('/api/agents/spend-cutter/apply', {
+  const r = await apiFetch('/api/agents/spend-cutter/apply', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rebalanced_fixed_expenses: activeCutterPlan.rebalanced_fixed_expenses })
@@ -1381,7 +1381,7 @@ document.getElementById('btnApplyCutterPlan').onclick = async () => {
 /* ---------- Groq Status ---------- */
 async function loadStatus(){
   try {
-    const r = await fetch('/api/status');
+    const r = await apiFetch('/api/status');
     const d = await r.json();
     const hint = document.getElementById('parseSourceHint');
     if (d.groq_configured){
@@ -1399,7 +1399,7 @@ async function loadStatus(){
 
 /* ---------- Salary & Savings Goal ---------- */
 async function loadSalary(){
-  const r = await fetch('/api/settings/salary');
+  const r = await apiFetch('/api/settings/salary');
   const d = await r.json();
   currentSalary = d.monthly_salary || 0;
   if (d.monthly_salary != null) document.getElementById('salaryInput').value = d.monthly_salary;
@@ -1407,7 +1407,7 @@ async function loadSalary(){
 document.getElementById('saveSalaryBtn').onclick = async () => {
   const val = document.getElementById('salaryInput').value;
   if (!val) return;
-  await fetch('/api/settings/salary', {
+  await apiFetch('/api/settings/salary', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({monthly_salary: parseFloat(val)})
   });
@@ -1415,13 +1415,13 @@ document.getElementById('saveSalaryBtn').onclick = async () => {
 };
 
 async function loadSavingsPercent(){
-  const r = await fetch('/api/settings/savings-percent');
+  const r = await apiFetch('/api/settings/savings-percent');
   const d = await r.json();
   document.getElementById('savingsPercentInput').value = d.savings_percent != null ? d.savings_percent : '';
 }
 document.getElementById('saveSavingsPercentBtn').onclick = async () => {
   const val = document.getElementById('savingsPercentInput').value;
-  await fetch('/api/settings/savings-percent', {
+  await apiFetch('/api/settings/savings-percent', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({savings_percent: val === '' ? null : parseFloat(val)})
   });
@@ -1447,7 +1447,7 @@ function applyIncomeVisibility(hidden){
 
 /* ---------- Summary & Chart ---------- */
 async function loadSummary(){
-  const r = await fetch('/api/summary');
+  const r = await apiFetch('/api/summary');
   const d = await r.json();
 
   currentPurchases = d.month_purchases || 0;
@@ -1583,7 +1583,7 @@ document.getElementById('saveExpenseBtn').onclick = async () => {
 
 /* ---------- Timeline & Purchases ---------- */
 async function loadTimeline(){
-  const r = await fetch('/api/purchases');
+  const r = await apiFetch('/api/purchases');
   const rows = await r.json();
   const tl = document.getElementById('timeline');
   tl.innerHTML = '';
@@ -1607,7 +1607,7 @@ async function loadTimeline(){
   });
   tl.querySelectorAll('.tl-del').forEach(btn => {
     btn.onclick = async () => {
-      await fetch(`/api/purchases/${btn.dataset.id}`, { method:'DELETE' });
+      await apiFetch(`/api/purchases/${btn.dataset.id}`, { method:'DELETE' });
       refreshAll();
     };
   });
@@ -1615,7 +1615,7 @@ async function loadTimeline(){
 
 async function loadDayExpenses(){
   const now = new Date();
-  const r = await fetch(`/api/day-expenses?year=${now.getFullYear()}&month=${now.getMonth()+1}`);
+  const r = await apiFetch(`/api/day-expenses?year=${now.getFullYear()}&month=${now.getMonth()+1}`);
   const d = await r.json();
   const caption = document.getElementById('dayTotalsCaption');
   const monthTotal = (d.day_totals || []).reduce((sum, row) => sum + row.total, 0);
@@ -1643,7 +1643,7 @@ async function loadDayExpenses(){
   });
   list.querySelectorAll('.tl-del').forEach(btn => {
     btn.onclick = async () => {
-      await fetch(`/api/day-expenses/${btn.dataset.id}`, { method:'DELETE' });
+      await apiFetch(`/api/day-expenses/${btn.dataset.id}`, { method:'DELETE' });
       loadDayExpenses();
       loadSafeToSpend();
     };
@@ -1655,7 +1655,7 @@ document.getElementById('btnSyncTelegram').onclick = async () => {
   const status = document.getElementById('telegramSyncStatus');
   btn.disabled = true; btn.textContent = 'Syncing…'; status.textContent = '';
   try {
-    const r = await fetch('/api/telegram/sync', { method: 'POST' });
+    const r = await apiFetch('/api/telegram/sync', { method: 'POST' });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Could not sync Telegram messages.');
     if (d.warning) {
@@ -1676,13 +1676,13 @@ document.getElementById('btnSyncTelegram').onclick = async () => {
 
 /* ---------- Profile & Recommendations ---------- */
 async function loadProfile(){
-  const r = await fetch('/api/settings/profile');
+  const r = await apiFetch('/api/settings/profile');
   const d = await r.json();
   document.getElementById('professionInput').value = d.profession || '';
   document.getElementById('interestsInput').value = d.interests || '';
 }
 document.getElementById('saveProfileBtn').onclick = async () => {
-  await fetch('/api/settings/profile', {
+  await apiFetch('/api/settings/profile', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
       profession: document.getElementById('professionInput').value.trim(),
@@ -1696,7 +1696,7 @@ async function loadRecommendations(){
   const list = document.getElementById('recsList');
   const badge = document.getElementById('recsSourceBadge');
   try {
-    const r = await fetch('/api/recommendations');
+    const r = await apiFetch('/api/recommendations');
     const d = await r.json();
     badge.className = `source-badge ${d.source === 'groq' ? 'groq' : 'rules'}`;
     badge.textContent = d.source === 'groq' ? 'Groq AI' : 'Rule-based';
@@ -1722,7 +1722,7 @@ async function loadRecommendations(){
 
 /* ---------- Wishlist & Agent 2: Deal Evaluator ---------- */
 async function loadWishlist(){
-  const r = await fetch('/api/wishlist');
+  const r = await apiFetch('/api/wishlist');
   const d = await r.json();
   currentMonthlySavings = d.monthly_savings || 0;
 
@@ -1766,7 +1766,7 @@ async function loadWishlist(){
     btn.onclick = async () => {
       btn.disabled = true; btn.textContent = 'Checking…';
       try {
-        const r = await fetch(`/api/wishlist/${btn.dataset.id}/refresh`, {method:'POST'});
+        const r = await apiFetch(`/api/wishlist/${btn.dataset.id}/refresh`, {method:'POST'});
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || 'Could not refresh price');
         if (d.needs_price_confirmation) {
@@ -1774,7 +1774,7 @@ async function loadWishlist(){
           if (raw === null) return;
           const price = parseFloat(String(raw).replace(/[,₹ ]/g, ''));
           if (!price || price <= 0) { alert('Please enter a valid positive price.'); return; }
-          const mr = await fetch(`/api/wishlist/${btn.dataset.id}/manual-price`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({price})});
+          const mr = await apiFetch(`/api/wishlist/${btn.dataset.id}/manual-price`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({price})});
           const md = await mr.json();
           if (!mr.ok) throw new Error(md.error || 'Could not save price');
         }
@@ -1793,7 +1793,7 @@ async function loadWishlist(){
       targetBox.innerHTML = '<div class="hint">Agent evaluating market prices & alternatives...</div>';
 
       try {
-        const r = await fetch('/api/agents/deal-evaluator', {
+        const r = await apiFetch('/api/agents/deal-evaluator', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, price })
@@ -1820,7 +1820,7 @@ async function loadWishlist(){
 
   list.querySelectorAll('.tl-del').forEach(btn => {
     btn.onclick = async () => {
-      await fetch(`/api/wishlist/${btn.dataset.id}`, { method:'DELETE' });
+      await apiFetch(`/api/wishlist/${btn.dataset.id}`, { method:'DELETE' });
       loadWishlist();
     };
   });
@@ -1828,7 +1828,7 @@ async function loadWishlist(){
 
 async function loadPriceHistory(id){
   try {
-    const r = await fetch(`/api/wishlist/${id}/history`);
+    const r = await apiFetch(`/api/wishlist/${id}/history`);
     const d = await r.json();
     const canvas = document.getElementById(`priceHistory-${id}`);
     if (!canvas || !window.Chart) return;
@@ -1849,7 +1849,7 @@ document.getElementById('wlImportBtn').onclick = async () => {
   if (!url) { alert('Paste an Amazon or Flipkart product link.'); return; }
   btn.disabled = true; btn.textContent = 'Reading product…';
   try {
-    const r = await fetch('/api/wishlist/import', {
+    const r = await apiFetch('/api/wishlist/import', {
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({url})
     });
     const d = await r.json();
@@ -1862,7 +1862,7 @@ document.getElementById('wlImportBtn').onclick = async () => {
       const price = parseFloat(String(raw).replace(/[,₹ ]/g, ''));
       if (!price || price <= 0) { alert('Please enter a valid current price to start tracking.'); return; }
       if (!name || !name.trim()) return;
-      const ar = await fetch('/api/wishlist', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name.trim(), price, product_url:url, platform:d.platform})});
+      const ar = await apiFetch('/api/wishlist', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name.trim(), price, product_url:url, platform:d.platform})});
       const ad = await ar.json();
       if (!ar.ok) throw new Error(ad.error || 'Could not add product.');
     }
@@ -1876,7 +1876,7 @@ document.getElementById('wlAddBtn').onclick = async () => {
   const name = document.getElementById('wlName').value.trim();
   const price = document.getElementById('wlPrice').value;
   if (!name || !price){ alert('Enter product name and price.'); return; }
-  await fetch('/api/wishlist', {
+  await apiFetch('/api/wishlist', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({name, price: parseFloat(price)})
   });
@@ -1891,7 +1891,7 @@ async function loadFlights(){
   const list = document.getElementById('flightList');
   if (!list) return;
   try {
-    const r = await fetch('/api/flights');
+    const r = await apiFetch('/api/flights');
     const items = await r.json();
     list.innerHTML = '';
     if (!items.length){ list.innerHTML = '<div class="flight-empty">No flights are being tracked yet.</div>'; return; }
@@ -1923,7 +1923,7 @@ async function loadFlights(){
     list.querySelectorAll('.btn-check-flight').forEach(btn => btn.onclick = async () => {
       btn.disabled=true; btn.textContent='Checking…';
       try {
-        const r=await fetch(`/api/flights/${btn.dataset.id}/check`,{method:'POST'});
+        const r=await apiFetch(`/api/flights/${btn.dataset.id}/check`,{method:'POST'});
         const d=await r.json();
         if(!r.ok) throw new Error(d.error||'Could not check fare.');
         await loadFlights();
@@ -1932,13 +1932,13 @@ async function loadFlights(){
       }
       catch(e){ alert(e.message); btn.disabled=false; btn.textContent='↻ Check fare now'; }
     });
-    list.querySelectorAll('.btn-delete-flight').forEach(btn => btn.onclick = async () => { await fetch(`/api/flights/${btn.dataset.id}`,{method:'DELETE'}); loadFlights(); });
+    list.querySelectorAll('.btn-delete-flight').forEach(btn => btn.onclick = async () => { await apiFetch(`/api/flights/${btn.dataset.id}`,{method:'DELETE'}); loadFlights(); });
   } catch(e){ list.innerHTML='<div class="flight-empty">Could not load flight trackers.</div>'; }
 }
 
 async function loadFlightHistory(id){
   try{
-    const r=await fetch(`/api/flights/${id}/history`); const d=await r.json(); const canvas=document.getElementById(`flightHistory-${id}`);
+    const r=await apiFetch(`/api/flights/${id}/history`); const d=await r.json(); const canvas=document.getElementById(`flightHistory-${id}`);
     if(!canvas || !window.Chart) return;
     const rows=(d.history||[]);
     const labels=rows.map(x=>new Date(x.checked_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}));
@@ -2004,7 +2004,7 @@ document.getElementById('btnSearchFlights').onclick = async () => {
 
   btn.disabled = true; btn.textContent = 'Searching…'; hint.textContent = ''; box.innerHTML = '';
   try {
-    const r = await fetch('/api/flights/search', {
+    const r = await apiFetch('/api/flights/search', {
       method: 'POST',
       headers: {'Content-Type':'application/json','Accept':'application/json'},
       body: JSON.stringify(payload)
@@ -2023,7 +2023,7 @@ document.getElementById('btnAddFlight').onclick = async () => {
   const btn=document.getElementById('btnAddFlight'); const hint=document.getElementById('flightSetupHint');
   btn.disabled=true; btn.textContent='Starting tracker…'; hint.textContent='';
   try {
-    const r=await fetch('/api/flights',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)});
+    const r=await apiFetch('/api/flights',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)});
     const d=await readJsonResponse(r);
     hint.textContent=d.warning ? `Tracker saved, but the first fare check failed: ${d.warning}` : 'Flight tracker started.';
     ['flightOrigin','flightDestination','flightDeparture','flightReturn','flightTarget','flightEmail'].forEach(id=>document.getElementById(id).value='');
@@ -2038,7 +2038,7 @@ async function loadInsights(){
   const card = document.getElementById('insightsCard');
   const badge = document.getElementById('insightsSourceBadge');
   try {
-    const r = await fetch('/api/insights');
+    const r = await apiFetch('/api/insights');
     const d = await r.json();
     badge.className = `source-badge ${d.source === 'groq' ? 'groq' : 'rules'}`;
     badge.textContent = d.source === 'groq' ? 'Groq Review' : 'Rule Analysis';
@@ -2108,7 +2108,7 @@ document.getElementById('confirmAddBtn').onclick = async () => {
   const purchased_on = document.getElementById('prodDate').value;
   if (!name || !price){ alert('Enter both name and price.'); return; }
 
-  await fetch('/api/purchases', {
+  await apiFetch('/api/purchases', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({name, price: parseFloat(price), purchased_on})
   });
@@ -2140,7 +2140,7 @@ async function sendChatMessage() {
   history.scrollTop = history.scrollHeight;
 
   try {
-    const res = await fetch('/api/chat', {
+    const res = await apiFetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: msg })
@@ -2182,7 +2182,7 @@ async function sendSaraMessage() {
   history.scrollTop = history.scrollHeight;
 
   try {
-    const res = await fetch('/api/sara/chat', {
+    const res = await apiFetch('/api/sara/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: msg, history: saraConversation })
