@@ -603,7 +603,7 @@ def _month_spend(db, year, month, user_id):
     month_prefix = f"{year:04d}-{month:02d}"
     purchases_total = db.execute(
         "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
-        (f"{month_prefix}%", user["id"]),
+        (f"{month_prefix}%", user_id),
     ).fetchone()["s"]
     fixed_rows = db.execute(
         "SELECT category, amount FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ? ORDER BY amount DESC",
