@@ -455,6 +455,45 @@ def migration_status():
     return jsonify({"unowned": counts, "total": sum(counts.values())})
 
 
+@app.route("/api/migration/claim", methods=["POST"])
+def migration_claim():
+    """Claim all currently unowned legacy financial rows for the signed-in user."""
+    user = require_user()
+    data = request.get_json(silent=True) or {}
+    if data.get("confirm") is not True:
+        return jsonify({
+            "error": "Explicit confirmation required.",
+            "message": "Send {\"confirm\": true} to claim the unowned legacy records for this account.",
+        }), 400
+
+    db = get_db()
+    tables = (
+        "purchases",
+        "settings",
+        "monthly_expenses",
+        "wishlist",
+        "day_expenses",
+        "flights",
+    )
+    counts = {}
+    try:
+        for table in tables:
+            cur = db.execute(
+                "UPDATE " + table + " SET user_id = ? WHERE user_id IS NULL",
+                (user["id"],),
+            )
+            counts[table] = cur.rowcount
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return jsonify({
+        "claimed": counts,
+        "total": sum(counts.values()),
+    }), 200
+
+
 @app.route("/api/profile", methods=["GET", "POST"])
 def profile():
     """Read or create the signed-in user's profile."""
