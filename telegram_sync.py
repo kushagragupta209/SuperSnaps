@@ -59,7 +59,7 @@ def is_telegram_sync_configured() -> bool:
     return db_pg.is_postgres_configured()
 
 
-def fetch_pending(db):
+def fetch_pending(db, user_id):
     """
     Return every unprocessed row from the pending_expenses inbox table,
     oldest first (so entries land in day_expenses in the order they were
@@ -77,8 +77,11 @@ def fetch_pending(db):
             "telegram_sync.py and README's Cloud Deployment section)."
         )
     rows = db.execute(
-        "SELECT * FROM pending_expenses WHERE processed = false ORDER BY sent_at ASC"
-    ).fetchall()
+        "SELECT p.* FROM pending_expenses p "
+        "INNER JOIN telegram_user_links l ON l.chat_id = p.chat_id "
+        "WHERE p.processed = false AND l.user_id = ? "
+        "ORDER BY p.sent_at ASC"
+    , (user_id,)).fetchall()
     return [dict(r) for r in rows]
 
 
