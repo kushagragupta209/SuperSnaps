@@ -1506,8 +1506,19 @@ async function authFetch(url, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set('Authorization', `Bearer ${data.session.access_token}`);
   if (!headers.has('Content-Type') && options.body) headers.set('Content-Type', 'application/json');
-  return fetch(url, { ...options, headers });
+  return window.__snapsNativeFetch(url, { ...options, headers });
 }
+
+/* Route all authenticated API calls through the Supabase Bearer-token fetcher.
+   This keeps older dashboard loaders safe after the multi-user auth gate. */
+window.__snapsNativeFetch = window.__snapsNativeFetch || window.fetch.bind(window);
+window.fetch = function(url, options = {}) {
+  const path = String(url || '');
+  if (path.startsWith('/api/') && !path.startsWith('/api/auth/config') && !path.startsWith('/api/auth/me')) {
+    return authFetch(url, options);
+  }
+  return window.__snapsNativeFetch(url, options);
+};
 
 document.getElementById('previewBtn').onclick = async () => {
   const text = document.getElementById('expenseInput').value.trim();
