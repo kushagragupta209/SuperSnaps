@@ -457,90 +457,12 @@ def migration_status():
 
 @app.route("/api/migration/claim", methods=["POST"])
 def migration_claim():
-    """Claim unowned legacy financial rows for the signed-in user."""
-    user = require_user()
-    data = request.get_json(silent=True) or {}
-    if data.get("confirm") is not True:
-        return jsonify({
-            "error": "Explicit confirmation required.",
-            "message": "Send {\"confirm\": true} to claim the unowned legacy records for this account.",
-        }), 400
-
-    db = get_db()
-    tables = (
-        "purchases",
-        "monthly_expenses",
-        "wishlist",
-        "day_expenses",
-        "flights",
-    )
-    counts = {}
-    skipped = {}
-
-    try:
-        # These tables have no per-user uniqueness constraint, so their
-        # unowned legacy rows can be assigned directly.
-        for table in tables:
-            cur = db.execute(
-                "UPDATE " + table + " SET user_id = ? WHERE user_id IS NULL",
-                (user["id"],),
-            )
-            counts[table] = cur.rowcount
-
-        # settings is special: (user_id, key) is unique. If the signed-in
-        # account already has a setting such as monthly_salary, keep that
-        # account value and remove only the duplicate legacy row instead of
-        # aborting the entire migration.
-        conflict_rows = db.execute(
-            """SELECT key FROM settings
-               WHERE user_id IS NULL
-                 AND EXISTS (
-                     SELECT 1 FROM settings owned
-                     WHERE owned.user_id = ? AND owned.key = settings.key
-                 )""",
-            (user["id"],),
-        ).fetchall()
-        skipped["settings_conflicts"] = [row["key"] for row in conflict_rows]
-
-        cur = db.execute(
-            """UPDATE settings
-               SET user_id = ?
-               WHERE user_id IS NULL
-                 AND NOT EXISTS (
-                     SELECT 1 FROM settings owned
-                     WHERE owned.user_id = ? AND owned.key = settings.key
-                 )""",
-            (user["id"], user["id"]),
-        )
-        counts["settings"] = cur.rowcount
-
-        if conflict_rows:
-            db.execute(
-                """DELETE FROM settings
-                   WHERE user_id IS NULL
-                     AND EXISTS (
-                         SELECT 1 FROM settings owned
-                         WHERE owned.user_id = ? AND owned.key = settings.key
-                     )""",
-                (user["id"],),
-            )
-
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-
-    claimed_total = sum(counts.values())
+    """Disabled after the one-time legacy ownership migration completed."""
+    require_user()
     return jsonify({
-        "claimed": counts,
-        "skipped": skipped,
-        "total": claimed_total,
-        "message": (
-            "Migration completed. Existing account settings were preserved "
-            "where they conflicted with legacy settings."
-        ),
-    }), 200
-
+        "error": "Migration is already complete.",
+        "message": "There are no unowned legacy records left to claim.",
+    }), 410
 
 @app.route("/api/profile", methods=["GET", "POST"])
 def profile():
@@ -627,7 +549,9 @@ def add_purchase():
 def delete_purchase(purchase_id):
     user = require_user()
     db = get_db()
-    db.execute("DELETE FROM purchases WHERE id = ? AND user_id = ?", (purchase_id, user["id"]))
+    cur = db.execute("DELETE FROM purchases WHERE id = ? AND user_id = ?", (purchase_id, user["id"]))
+    if cur.rowcount == 0:
+        return jsonify({"error": "Purchase not found."}), 404
     db.commit()
     return jsonify({"deleted": purchase_id})
 
@@ -861,7 +785,7 @@ def list_wishlist():
     month_prefix = f"{today.year:04d}-{today.month:02d}"
     month_purchases = db.execute(
         "SELECT COALESCE(SUM(price), 0) AS s FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
-        (f"{month_prefix}%", user["id"]),
+        (f"{month_prefix}%", user_id),
     ).fetchone()["s"]
     fixed_total = db.execute(
         "SELECT COALESCE(SUM(amount), 0) AS s FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ?",
@@ -1122,7 +1046,9 @@ def manual_wishlist_price(item_id):
 def delete_wishlist(item_id):
     user = require_user()
     db = get_db()
-    db.execute("DELETE FROM wishlist WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+    cur = db.execute("DELETE FROM wishlist WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+    if cur.rowcount == 0:
+        return jsonify({"error": "Wishlist item not found."}), 404
     db.commit()
     return jsonify({"deleted": item_id})
 
@@ -1249,8 +1175,8 @@ def add_flight():
         )
         checked_at = datetime.utcnow().isoformat()
         db.execute(
-            "UPDATE flights SET current_price = ?, lowest_price = ? WHERE id = ?",
-            (price, price, flight_id),
+            "UPDATE flights SET current_price = ?, lowest_price = ? WHERE id = ? AND user_id = ?",
+            (price, price, flight_id, user["id"]),
         )
         db.execute(
             "INSERT INTO flight_price_history (flight_id, price, checked_at) VALUES (?, ?, ?)",
@@ -1363,8 +1289,11 @@ def flight_price_history(flight_id):
 
 @app.route("/api/flights/<int:flight_id>", methods=["DELETE"])
 def delete_flight(flight_id):
+    user = require_user()
     db = get_db()
-    db.execute("DELETE FROM flights WHERE id = ? AND user_id = ?", (flight_id, user["id"]))
+    cur = db.execute("DELETE FROM flights WHERE id = ? AND user_id = ?", (flight_id, user["id"]))
+    if cur.rowcount == 0:
+        return jsonify({"error": "Flight tracker not found."}), 404
     db.commit()
     return jsonify({"deleted": flight_id})
 
@@ -1377,9 +1306,12 @@ def _expense_budget_snapshot(db, expense_date=None, user_id=None):
     except ValueError:
         expense_day = date.today()
 
-    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user["id"],)).fetchone()
+    if not user_id:
+        raise ValueError("user_id is required for budget snapshots")
+
+    salary_row = db.execute("SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?", (user_id,)).fetchone()
     salary = float(salary_row["value"]) if salary_row else None
-    savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent' AND user_id = ?", (user["id"],)).fetchone()
+    savings_row = db.execute("SELECT value FROM settings WHERE key = 'savings_percent' AND user_id = ?", (user_id,)).fetchone()
     savings_pct = float(savings_row["value"]) if savings_row else agent.DEFAULT_SAVINGS_PERCENT
 
     month_prefix = f"{expense_day.year:04d}-{expense_day.month:02d}"
@@ -1558,7 +1490,9 @@ def list_day_expenses():
 def delete_day_expense(item_id):
     user = require_user()
     db = get_db()
-    db.execute("DELETE FROM day_expenses WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+    cur = db.execute("DELETE FROM day_expenses WHERE id = ? AND user_id = ?", (item_id, user["id"]))
+    if cur.rowcount == 0:
+        return jsonify({"error": "Day expense not found."}), 404
     db.commit()
     return jsonify({"deleted": item_id})
 
@@ -1635,6 +1569,7 @@ def sync_telegram_expenses():
 @app.route("/api/monthly-expenses/parse", methods=["POST"])
 def parse_monthly_expenses():
     """Preview-parse text without saving, so the UI can show a confirm step."""
+    require_user()
     data = request.get_json(force=True)
     text = data.get("text", "")
     parsed, source = agent.parse_expense(text)
