@@ -434,6 +434,27 @@ def require_user():
 with app.app_context():
     ensure_user_columns()
 
+@app.route("/api/migration/status", methods=["GET"])
+def migration_status():
+    """Report legacy financial rows that have not been assigned to an account."""
+    require_user()
+    db = get_db()
+    tables = (
+        "purchases",
+        "settings",
+        "monthly_expenses",
+        "wishlist",
+        "day_expenses",
+        "flights",
+    )
+    counts = {}
+    for table in tables:
+        counts[table] = db.execute(
+            "SELECT COUNT(*) AS count FROM " + table + " WHERE user_id IS NULL"
+        ).fetchone()["count"]
+    return jsonify({"unowned": counts, "total": sum(counts.values())})
+
+
 @app.route("/api/profile", methods=["GET", "POST"])
 def profile():
     """Read or create the signed-in user's profile."""
