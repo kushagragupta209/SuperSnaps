@@ -1952,6 +1952,64 @@ def financial_chat():
     except Exception as e:
         return jsonify({"reply": f"Encountered an issue running query: {str(e)}", "sql": sql, "data": []}), 500
 
+@app.route("/api/sara/financial-context", methods=["GET"])
+def sara_financial_context():
+    """Return a compact, user-scoped financial snapshot for Sara."""
+    user = require_user()
+    db = get_db()
+    today = date.today()
+
+    salary_row = db.execute(
+        "SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?",
+        (user["id"],),
+    ).fetchone()
+    savings_row = db.execute(
+        "SELECT value FROM settings WHERE key = 'savings_percent' AND user_id = ?",
+        (user["id"],),
+    ).fetchone()
+
+    salary = float(salary_row["value"]) if salary_row else None
+    savings_percent = (
+        float(savings_row["value"])
+        if savings_row
+        else agent.DEFAULT_SAVINGS_PERCENT
+    )
+
+    month_purchases, fixed_total, fixed_expenses = _month_spend(
+        db, today.year, today.month, user["id"]
+    )
+    budget = _expense_budget_snapshot(db, today.isoformat(), user["id"])
+
+    wishlist = db.execute(
+        "SELECT COUNT(*) AS count, COALESCE(SUM(price), 0) AS total "
+        "FROM wishlist WHERE user_id = ?",
+        (user["id"],),
+    ).fetchone()
+    flights_count = db.execute(
+        "SELECT COUNT(*) AS count FROM flights WHERE user_id = ? AND active = 1",
+        (user["id"],),
+    ).fetchone()
+
+    return jsonify({
+        "today": today.isoformat(),
+        "currency": "INR",
+        "monthly_salary": salary,
+        "savings_percent": savings_percent,
+        "month": {
+            "purchases": round(float(month_purchases or 0), 2),
+            "fixed_expenses": round(float(fixed_total or 0), 2),
+            "fixed_expense_items": fixed_expenses,
+            "discretionary_spending": round(float(budget.get("monthly_spent") or 0), 2),
+        },
+        "budget": budget,
+        "wishlist": {
+            "count": int(wishlist["count"] or 0),
+            "total_value": round(float(wishlist["total"] or 0), 2),
+        },
+        "active_flight_trackers": int(flights_count["count"] or 0),
+    })
+
+
 # --------------------------------------------------------------------------- #
 # Routes — API: Sara (supervisor agent)
 # --------------------------------------------------------------------------- #
