@@ -1,4 +1,6 @@
 import os
+import hashlib
+import secrets
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -320,6 +322,16 @@ def _init_db_postgres():
             linked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
 
+        CREATE TABLE IF NOT EXISTS telegram_link_tokens (
+            id         SERIAL PRIMARY KEY,
+            token_hash TEXT NOT NULL UNIQUE,
+            user_id    UUID NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            used_at    TIMESTAMPTZ
+        );
+        CREATE INDEX IF NOT EXISTS idx_telegram_link_tokens_expiry
+            ON telegram_link_tokens (expires_at);
+
         -- Telegram's durable inbox (see telegram_sync.py) — written by the
         -- Cloudflare Worker via Supabase's REST API, read here directly.
         CREATE TABLE IF NOT EXISTS pending_expenses (
@@ -370,7 +382,7 @@ def enforce_api_auth():
     # Initial Telegram/Sara request.
     # The user_id is resolved later from chat_id -> telegram_user_links.
     if (
-        request.path == "/api/telegram/sara"
+        request.path in {"/api/telegram/sara", "/api/telegram/link/complete"}
         and request.headers.get("X-Telegram-Sara-Secret")
         == os.environ.get("TELEGRAM_SARA_SECRET")
     ):
@@ -2445,6 +2457,78 @@ def sara_chat():
 
     result = sara.run_sara(message, app.test_client(), history, access_token=auth.get_bearer_token(request))
     return jsonify(result)
+
+
+@app.route("/api/telegram/link-token", methods=["POST"])
+def telegram_link_token():
+    """Create a short-lived one-time Telegram account linking token."""
+    user = require_user()
+    db = get_db()
+    raw_token = secrets.token_urlsafe(24)
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+    # Keep only the newest active token for this account.
+    db.execute(
+        "DELETE FROM telegram_link_tokens WHERE user_id = ? AND used_at IS NULL",
+        (user["id"],),
+    )
+    db.execute(
+        "INSERT INTO telegram_link_tokens (token_hash, user_id, expires_at) "
+        "VALUES (?, ?, NOW() + INTERVAL '10 minutes')",
+        (token_hash, user["id"]),
+    )
+    db.commit()
+
+    bot_username = (os.environ.get("TELEGRAM_BOT_USERNAME") or "").strip().lstrip("@")
+    deep_link = f"https://t.me/{bot_username}?start={raw_token}" if bot_username else None
+
+    return jsonify({
+        "expires_in_seconds": 600,
+        "deep_link": deep_link,
+        "token": raw_token,
+        "bot_username_configured": bool(bot_username),
+    })
+
+
+@app.route("/api/telegram/link/complete", methods=["POST"])
+def telegram_link_complete():
+    """Consume a one-time token sent by Telegram /start and bind that chat."""
+    expected_secret = os.environ.get("TELEGRAM_SARA_SECRET")
+    if not expected_secret or request.headers.get("X-Telegram-Sara-Secret") != expected_secret:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    chat_id = data.get("chat_id")
+    raw_token = str(data.get("token") or "").strip()
+    if chat_id is None or not raw_token:
+        return jsonify({"error": "chat_id and token are required."}), 400
+
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    db = get_db()
+    row = db.execute(
+        "SELECT id, user_id FROM telegram_link_tokens "
+        "WHERE token_hash = ? AND used_at IS NULL AND expires_at > NOW()",
+        (token_hash,),
+    ).fetchone()
+
+    if not row:
+        return jsonify({
+            "linked": False,
+            "error": "That linking code is invalid or expired. Please generate a new one from Ledger."
+        }), 400
+
+    db.execute(
+        "INSERT INTO telegram_user_links (chat_id, user_id) VALUES (?, ?) "
+        "ON CONFLICT(chat_id) DO UPDATE SET user_id = excluded.user_id",
+        (int(chat_id), row["user_id"]),
+    )
+    db.execute(
+        "UPDATE telegram_link_tokens SET used_at = NOW() WHERE id = ?",
+        (row["id"],),
+    )
+    db.commit()
+
+    return jsonify({"linked": True})
 
 
 @app.route("/api/telegram/link", methods=["POST"])
