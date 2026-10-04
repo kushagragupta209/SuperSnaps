@@ -74,6 +74,23 @@
     text-align: right;
   }
 
+  /* --- Financial Goals --- */
+  .goal-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+  .goal-card { background:var(--paper-card); border:1px solid var(--paper-line); border-radius:14px; padding:20px; box-shadow:var(--paper-shadow); }
+  .goal-card.goal-complete { border-color:rgba(57,115,76,.45); }
+  .goal-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .goal-name { font-family:var(--font-display); font-size:20px; font-weight:600; }
+  .goal-status { font:10px var(--font-mono); text-transform:uppercase; letter-spacing:.06em; padding:4px 8px; border-radius:999px; background:var(--paper-green-soft); color:var(--paper-green-dark); }
+  .goal-status.at-risk,.goal-status.behind { background:rgba(201,162,75,.14); color:#80621f; }
+  .goal-status.overdue { background:rgba(181,72,47,.12); color:var(--rust); }
+  .goal-progress-track { height:8px; background:#ddd6c5; border-radius:999px; overflow:hidden; margin:14px 0 8px; }
+  .goal-progress-fill { height:100%; background:var(--paper-green); border-radius:999px; }
+  .goal-metrics { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+  .goal-metric-label { font:10px var(--font-mono); color:var(--paper-muted); text-transform:uppercase; }
+  .goal-metric-value { margin-top:3px; font-size:14px; font-weight:600; }
+  .goal-plan-note { margin-top:14px; padding:10px 12px; border-radius:10px; background:var(--paper-green-soft); color:var(--paper-green-dark); font-size:12px; line-height:1.45; }
+  .goal-form { display:grid; grid-template-columns:1.4fr 1fr 1fr auto; gap:10px; align-items:end; }
+  @media(max-width:760px){ .goal-form{grid-template-columns:1fr 1fr;} }
   /* --- Navigation & Tabs --- */
   .app-nav {
     display: flex;
@@ -514,6 +531,7 @@
   </div>
   <nav class="sidebar-nav" aria-label="Dashboard Workspaces">
     <button class="dashboard-tab active" data-tab="overview">⌂ <span>Overview</span></button>
+    <button class="dashboard-tab" data-tab="goals" id="goalsTab" style="display:none;">◎ <span>Goals</span></button>
     <button class="dashboard-tab" data-tab="transactions">↗ <span>Transactions</span></button>
     <button class="dashboard-tab" data-tab="spending">◌ <span>Spending</span></button>
     <button class="dashboard-tab" data-tab="wishlist">♡ <span>Wishlist &amp; Deals</span></button>
@@ -659,6 +677,34 @@
           <div class="sub" id="statFixedBreakdown" style="margin-top:6px; line-height:1.5;">—</div>
         </div>
       </div>
+    </section>
+
+    <!-- FINANCIAL GOALS TAB -->
+    <section class="true-panel" data-workspace="goals" id="goalsWorkspace" aria-hidden="true">
+      <div class="workspace-title">
+        <div>
+          <div class="workspace-kicker">Financial Planning</div>
+          <h2>Goals</h2>
+          <p>Track the targets you have asked Sara to help you reach.</p>
+        </div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+          <div>
+            <h3 style="margin-bottom:4px;"><span class="num">+</span>Add a Goal</h3>
+            <div class="hint">You can also create goals directly through Sara.</div>
+          </div>
+        </div>
+        <div class="goal-form" style="margin-top:14px;">
+          <div><label class="field-label" for="goalName">Goal</label><input id="goalName" type="text" placeholder="e.g. Emergency Fund"></div>
+          <div><label class="field-label" for="goalTarget">Target Amount</label><input id="goalTarget" type="number" min="1" step="100" placeholder="100000"></div>
+          <div><label class="field-label" for="goalDate">Target Date</label><input id="goalDate" type="date"></div>
+          <button class="btn-primary" id="btnCreateGoal">Create</button>
+        </div>
+        <div class="hint" id="goalFormStatus" style="margin-top:10px;"></div>
+      </div>
+      <div id="goalPlanSummary" class="card" style="display:none;"></div>
+      <div id="goalList" class="goal-grid"></div>
     </section>
 
     <!-- 2. TRANSACTIONS TAB -->
@@ -1126,10 +1172,59 @@ function activateTab(name){
 
 tabs.forEach(t => t.addEventListener('click', () => activateTab(t.dataset.tab)));
 const savedTab = localStorage.getItem('ledgerActiveTab');
-if (savedTab && ['overview','transactions','spending','wishlist','flights','insights','sara'].includes(savedTab)) {
+if (savedTab && ['overview','goals','transactions','spending','wishlist','flights','insights','sara'].includes(savedTab)) {
   activateTab(savedTab);
 }
 
+/* ---------- Financial Goals ---------- */
+function goalStatusLabel(status){ return String(status || 'in_progress').replace(/_/g,' '); }
+function renderGoals(goals){
+  const list=document.getElementById('goalList'); if(!list)return;
+  list.innerHTML=(goals||[]).map(g=>{
+    const progress=Math.min(100,Math.max(0,Number(g.progress_percent||0)));
+    const status=String(g.status||'in_progress'), planStatus=String(g.plan_status||'');
+    let note='Required monthly saving: '+fmt(g.required_monthly_saving)+'.';
+    if(status==='complete') note='Goal reached. Nice work.';
+    else if(planStatus==='behind') note='You need about '+fmt(g.monthly_gap)+' more per month than your current budget capacity allows.';
+    else if(planStatus==='at_risk') note='You are close to the required pace. Monthly gap: '+fmt(g.monthly_gap)+'.';
+    else if(planStatus==='on_track') note='Your current budget capacity can support the required '+fmt(g.required_monthly_saving)+' per month.';
+    return '<article class="goal-card '+(status==='complete'?'goal-complete':'')+'">'+
+      '<div class="goal-head"><div class="goal-name">'+escapeHtml(g.name)+'</div><span class="goal-status '+escapeAttr(planStatus || status)+'">'+escapeHtml(goalStatusLabel(planStatus || status))+'</span></div>'+
+      '<div style="margin-top:12px;font-family:var(--font-mono);font-size:13px;">'+fmt(g.current_amount)+' <span style="color:var(--paper-muted);">of '+fmt(g.target_amount)+'</span></div>'+
+      '<div class="goal-progress-track"><div class="goal-progress-fill" style="width:'+progress+'%"></div></div>'+
+      '<div style="font:11px var(--font-mono);color:var(--paper-muted);">'+progress+'% complete</div>'+
+      '<div class="goal-metrics">'+
+        '<div><div class="goal-metric-label">Remaining</div><div class="goal-metric-value">'+fmt(g.remaining_amount)+'</div></div>'+
+        '<div><div class="goal-metric-label">Target</div><div class="goal-metric-value">'+escapeHtml(g.target_date)+'</div></div>'+
+        '<div><div class="goal-metric-label">Monthly Needed</div><div class="goal-metric-value">'+fmt(g.required_monthly_saving)+'</div></div>'+
+        '<div><div class="goal-metric-label">Days Left</div><div class="goal-metric-value">'+Number(g.days_left||0).toLocaleString('en-IN')+'</div></div>'+
+      '</div><div class="goal-plan-note">'+escapeHtml(note)+'</div></article>';
+  }).join('');
+}
+async function loadGoals(){
+  const tab=document.getElementById('goalsTab'), list=document.getElementById('goalList'); if(!tab||!list)return;
+  try{
+    const [gr,pr]=await Promise.all([apiFetch('/api/sara/goals'),apiFetch('/api/sara/goal-plan')]);
+    const gd=await gr.json(), pd=pr.ok?await pr.json():{goals:[]}, goals=gd.goals||[];
+    const planById=Object.fromEntries((pd.goals||[]).map(g=>[String(g.id),g]));
+    const merged=goals.map(g=>({...g,...(planById[String(g.id)]||{}),current_amount:g.current_amount,target_amount:g.target_amount}));
+    tab.style.display=goals.length?'inline-flex':'none';
+    if(!goals.length){ list.innerHTML=''; const s=document.getElementById('goalPlanSummary'); if(s)s.style.display='none'; return; }
+    renderGoals(merged);
+    const summary=document.getElementById('goalPlanSummary');
+    if(summary){ const behind=merged.filter(g=>['behind','at_risk'].includes(g.plan_status)); summary.style.display='block'; summary.innerHTML=behind.length ? '<h3 style="margin-bottom:6px;">Goal check</h3><div style="font-size:13px;color:var(--paper-muted);">'+behind.length+' goal'+(behind.length===1?' is':'s are')+' currently at risk or behind your available budget capacity.</div>' : '<h3 style="margin-bottom:6px;">You’re on track</h3><div style="font-size:13px;color:var(--paper-muted);">Your current budget capacity supports your active savings goals.</div>'; }
+  }catch(e){ console.error('Goals load failed:',e); }
+}
+async function createGoalFromPage(){
+  const name=document.getElementById('goalName').value.trim(), target=Number(document.getElementById('goalTarget').value), targetDate=document.getElementById('goalDate').value, status=document.getElementById('goalFormStatus');
+  if(!name||!target||target<=0||!targetDate){status.textContent='Enter a goal, target amount, and target date.';return;}
+  status.textContent='Saving…';
+  try{ const r=await apiFetch('/api/sara/goals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,target_amount:target,current_amount:0,target_date:targetDate})}); const d=await r.json(); if(!r.ok)throw new Error(d.error||'Could not create goal.'); status.textContent='Goal created.'; document.getElementById('goalName').value=''; document.getElementById('goalTarget').value=''; await loadGoals(); activateTab('goals'); }
+  catch(e){ status.textContent=e.message||'Could not create goal.'; }
+}
+document.getElementById('btnCreateGoal')?.addEventListener('click',createGoalFromPage);
+document.getElementById('goalDate')?.setAttribute('min',new Date().toISOString().slice(0,10));
+loadGoals();
 /* ---------- Monthly Spending Categories ---------- */
 let categorySpendingDate = new Date();
 categorySpendingDate.setDate(1);
