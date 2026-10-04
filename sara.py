@@ -52,6 +52,8 @@ TOOL_SPECS = {
     "get_financial_context":    {"method": "GET",    "path": "/api/sara/financial-context"},
     "get_spending_trends":       {"method": "GET",    "path": "/api/sara/spending-trends"},
     "assess_affordability":      {"method": "POST",   "path": "/api/sara/affordability"},
+    "get_financial_goals":        {"method": "GET",    "path": "/api/sara/goals"},
+    "create_financial_goal":      {"method": "POST",   "path": "/api/sara/goals"},
     "set_salary":              {"method": "POST",   "path": "/api/settings/salary"},
     "set_savings_percent":     {"method": "POST",   "path": "/api/settings/savings-percent"},
     "log_monthly_expenses":    {"method": "POST",   "path": "/api/monthly-expenses"},
@@ -121,6 +123,21 @@ TOOLS = [
             "name": {"type": "string", "description": "Name of the proposed purchase."},
             "price": {"type": "number", "description": "Purchase price in INR."},
         }, "required": ["price"]},
+    }},
+    {"type": "function", "function": {
+        "name": "get_financial_goals",
+        "description": "List the user's financial goals with progress, remaining amount, deadline, and required monthly saving.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "create_financial_goal",
+        "description": "Create or update a user financial savings goal. This stores the goal; it does not move money.",
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string", "description": "Goal name."},
+            "target_amount": {"type": "number", "description": "Target amount in INR."},
+            "current_amount": {"type": "number", "description": "Amount already saved toward this goal, default 0."},
+            "target_date": {"type": "string", "description": "Target date in YYYY-MM-DD."},
+        }, "required": ["name", "target_amount", "target_date"]},
     }},
     {"type": "function", "function": {
         "name": "set_salary",
@@ -336,6 +353,11 @@ Rules:
   something, call assess_affordability with the price before answering. Treat its
   status and remaining-budget figures as authoritative. Do not claim a purchase
   was made; this tool only analyzes affordability.
+- When the user asks about savings goals, progress toward a goal, or whether they
+  are on pace for a target date, call get_financial_goals first.
+- When the user explicitly asks Sara to create or update a savings goal, use
+  create_financial_goal. Confirm what was stored; do not imply that money was
+  transferred or saved automatically.
 - If the user asks whether they can afford a purchase, compare the requested
   price against the available budget/savings context. If the information is
   insufficient, ask for the missing amount or clarify whether they mean today's
