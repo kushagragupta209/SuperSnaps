@@ -2150,6 +2150,79 @@ def sara_spending_trends():
     })
 
 
+@app.route("/api/sara/affordability", methods=["POST"])
+def sara_affordability():
+    """Deterministically assess a proposed purchase against the user's budget."""
+    user = require_user()
+    data = request.get_json(force=True) or {}
+    try:
+        price = float(data.get("price") or 0)
+    except (TypeError, ValueError):
+        price = 0
+    name = str(data.get("name") or "purchase").strip() or "purchase"
+
+    if price <= 0:
+        return jsonify({"error": "A positive purchase price is required."}), 400
+
+    db = get_db()
+    today = date.today()
+    budget = _expense_budget_snapshot(db, today.isoformat(), user["id"])
+
+    salary_row = db.execute(
+        "SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?",
+        (user["id"],),
+    ).fetchone()
+    savings_row = db.execute(
+        "SELECT value FROM settings WHERE key = 'savings_percent' AND user_id = ?",
+        (user["id"],),
+    ).fetchone()
+
+    salary = float(salary_row["value"]) if salary_row else None
+    savings_percent = float(savings_row["value"]) if savings_row else agent.DEFAULT_SAVINGS_PERCENT
+
+    monthly_left = budget.get("monthly_left")
+    today_left = budget.get("today_left")
+    savings_target = round(salary * savings_percent / 100.0, 2) if salary else None
+
+    if monthly_left is None:
+        status = "insufficient_data"
+        after_monthly = None
+        savings_impact = None
+    else:
+        after_monthly = round(float(monthly_left) - price, 2)
+        if after_monthly < 0:
+            status = "not_affordable_from_budget"
+        elif after_monthly < max(0.0, float(monthly_left) * 0.2):
+            status = "affordable_but_tight"
+        else:
+            status = "affordable"
+
+        savings_impact = round(price / salary * 100, 1) if salary else None
+
+    today_impact = (
+        round(float(today_left) - price, 2)
+        if today_left is not None else None
+    )
+
+    return jsonify({
+        "name": name,
+        "price": round(price, 2),
+        "status": status,
+        "monthly_budget": {
+            "remaining_before": monthly_left,
+            "remaining_after": after_monthly,
+        },
+        "today_budget": {
+            "remaining_before": today_left,
+            "remaining_after": today_impact,
+        },
+        "salary": salary,
+        "savings_target_percent": savings_percent,
+        "savings_target_amount": savings_target,
+        "purchase_as_percent_of_salary": savings_impact,
+    })
+
+
 # --------------------------------------------------------------------------- #
 # Routes — API: Sara (supervisor agent)
 # --------------------------------------------------------------------------- #
