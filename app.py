@@ -1990,6 +1990,37 @@ def sara_financial_context():
         (user["id"],),
     ).fetchone()
 
+    # Deterministic health signals for Sara. These are computed from the
+    # authenticated user's data so the LLM reasons over facts rather than
+    # inventing budget numbers.
+    discretionary_spending = float(budget.get("monthly_spent") or 0)
+    monthly_left = budget.get("monthly_left")
+    savings_target_amount = (
+        round(float(salary) * savings_percent / 100.0, 2) if salary else None
+    )
+    total_discretionary_pool = (
+        round(discretionary_spending + float(monthly_left), 2)
+        if monthly_left is not None else None
+    )
+    spending_utilization = (
+        round((discretionary_spending / total_discretionary_pool) * 100, 1)
+        if total_discretionary_pool and total_discretionary_pool > 0 else None
+    )
+    day_of_month = today.day
+    days_in_month = calendar.monthrange(today.year, today.month)[1]
+    projected_monthly_spending = (
+        round(discretionary_spending / day_of_month * days_in_month, 2)
+        if discretionary_spending > 0 and day_of_month > 0 else 0
+    )
+    budget_status = None
+    if monthly_left is not None:
+        if monthly_left < 0:
+            budget_status = "over_budget"
+        elif spending_utilization is not None and spending_utilization >= 80:
+            budget_status = "at_risk"
+        else:
+            budget_status = "on_track"
+
     return jsonify({
         "today": today.isoformat(),
         "currency": "INR",
@@ -2002,6 +2033,13 @@ def sara_financial_context():
             "discretionary_spending": round(float(budget.get("monthly_spent") or 0), 2),
         },
         "budget": budget,
+        "financial_health": {
+            "budget_status": budget_status,
+            "savings_target_amount": savings_target_amount,
+            "total_discretionary_pool": total_discretionary_pool,
+            "spending_utilization_percent": spending_utilization,
+            "projected_monthly_discretionary_spending": projected_monthly_spending,
+        },
         "wishlist": {
             "count": int(wishlist["count"] or 0),
             "total_value": round(float(wishlist["total"] or 0), 2),
