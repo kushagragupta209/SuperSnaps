@@ -4,13 +4,12 @@
  * Telegram -> Sara gateway for SuperSnaps.
  *
  * Telegram calls this Worker instantly when a message arrives. The Worker
- * validates Telegram's webhook secret and your allowed chat id, then forwards
+ * validates Telegram's webhook secret, then forwards
  * the message to the Flask/Render Sara endpoint. The Worker sends Sara's
  * reply back through Telegram's Bot API.
  *
  * Required Worker secrets:
  *   TELEGRAM_WEBHOOK_SECRET  - Telegram setWebhook secret_token
- *   TELEGRAM_ALLOWED_CHAT_ID - your own Telegram numeric chat id
  *   TELEGRAM_BOT_TOKEN       - BotFather token used for sendMessage
  *   TELEGRAM_SARA_SECRET     - shared secret expected by the Flask app
  *   SARA_API_URL             - e.g. https://your-render-service.onrender.com/api/telegram/sara
@@ -81,7 +80,7 @@ async function processUpdate(update, env) {
   const text = message && message.text;
   const chatId = message && message.chat && message.chat.id;
 
-  if (!text || String(chatId) !== String(env.TELEGRAM_ALLOWED_CHAT_ID)) {
+  if (!text || chatId == null) {
     return;
   }
 
@@ -99,7 +98,9 @@ async function processUpdate(update, env) {
   });
 
   if (!saraResponse.ok) {
-    console.error("Sara request failed:", saraResponse.status, await saraResponse.text());
+    const errorBody = await saraResponse.text();
+    console.error("Sara request failed:", saraResponse.status, errorBody);
+    await sendTelegramReply(env, chatId, "⚠️ Sara could not process that message right now. Please try again in a moment.");
     return;
   }
 
