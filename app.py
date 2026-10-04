@@ -2126,6 +2126,17 @@ def sara_spending_trends():
         })
     category_changes.sort(key=lambda item: item["change"], reverse=True)
 
+    # Flag meaningful anomalies using a conservative deterministic rule:
+    # current category spend is >= 50% above last month and at least ₹500 higher.
+    anomalies = []
+    for item in category_changes:
+        if item["change"] >= 500 and item["pct_change"] is not None and item["pct_change"] >= 50:
+            anomalies.append({
+                **item,
+                "severity": "high" if item["pct_change"] >= 100 else "medium",
+                "reason": "category_spending_increased_significantly",
+            })
+
     return jsonify({
         "current_month": current,
         "previous_month": previous,
@@ -2135,6 +2146,7 @@ def sara_spending_trends():
             "direction": "up" if change > 0 else "down" if change < 0 else "flat",
         },
         "category_changes": category_changes[:10],
+        "anomalies": anomalies[:5],
     })
 
 
