@@ -2472,11 +2472,18 @@ def telegram_link_token():
         "DELETE FROM telegram_link_tokens WHERE user_id = ? AND used_at IS NULL",
         (user["id"],),
     )
-    db.execute(
-        "INSERT INTO telegram_link_tokens (token_hash, user_id, expires_at) "
-        "VALUES (?, ?, NOW() + INTERVAL '10 minutes')",
-        (token_hash, user["id"]),
-    )
+    if db_pg.is_postgres_configured():
+        db.execute(
+            "INSERT INTO telegram_link_tokens (token_hash, user_id, expires_at) "
+            "VALUES (?, ?, NOW() + INTERVAL '10 minutes')",
+            (token_hash, user["id"]),
+        )
+    else:
+        db.execute(
+            "INSERT INTO telegram_link_tokens (token_hash, user_id, expires_at) "
+            "VALUES (?, ?, datetime('now', '+10 minutes'))",
+            (token_hash, user["id"]),
+        )
     db.commit()
 
     bot_username = (os.environ.get("TELEGRAM_BOT_USERNAME") or "").strip().lstrip("@")
@@ -2505,11 +2512,18 @@ def telegram_link_complete():
 
     token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
     db = get_db()
-    row = db.execute(
-        "SELECT id, user_id FROM telegram_link_tokens "
-        "WHERE token_hash = ? AND used_at IS NULL AND expires_at > NOW()",
-        (token_hash,),
-    ).fetchone()
+    if db_pg.is_postgres_configured():
+        row = db.execute(
+            "SELECT id, user_id FROM telegram_link_tokens "
+            "WHERE token_hash = ? AND used_at IS NULL AND expires_at > NOW()",
+            (token_hash,),
+        ).fetchone()
+    else:
+        row = db.execute(
+            "SELECT id, user_id FROM telegram_link_tokens "
+            "WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')",
+            (token_hash,),
+        ).fetchone()
 
     if not row:
         return jsonify({
@@ -2523,7 +2537,9 @@ def telegram_link_complete():
         (int(chat_id), row["user_id"]),
     )
     db.execute(
-        "UPDATE telegram_link_tokens SET used_at = NOW() WHERE id = ?",
+        "UPDATE telegram_link_tokens SET used_at = "
+        + ("NOW()" if db_pg.is_postgres_configured() else "datetime('now')")
+        + " WHERE id = ?",
         (row["id"],),
     )
     db.commit()
