@@ -51,6 +51,7 @@ TOOL_SPECS = {
     "get_summary":             {"method": "GET",    "path": "/api/summary"},
     "get_financial_context":    {"method": "GET",    "path": "/api/sara/financial-context"},
     "get_spending_trends":       {"method": "GET",    "path": "/api/sara/spending-trends"},
+    "assess_affordability":      {"method": "POST",   "path": "/api/sara/affordability"},
     "set_salary":              {"method": "POST",   "path": "/api/settings/salary"},
     "set_savings_percent":     {"method": "POST",   "path": "/api/settings/savings-percent"},
     "log_monthly_expenses":    {"method": "POST",   "path": "/api/monthly-expenses"},
@@ -112,6 +113,14 @@ TOOLS = [
         "name": "get_spending_trends",
         "description": "Analyze the user's current vs previous month discretionary spending, transaction counts, top categories, and category changes.",
         "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "assess_affordability",
+        "description": "Assess whether the user can afford a proposed purchase using their current discretionary budget and savings target. This is analysis only and does not create a purchase.",
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string", "description": "Name of the proposed purchase."},
+            "price": {"type": "number", "description": "Purchase price in INR."},
+        }, "required": ["price"]},
     }},
     {"type": "function", "function": {
         "name": "set_salary",
@@ -323,6 +332,10 @@ Rules:
 - When financial_context includes financial_health, use its budget_status and
   computed percentages/projections as facts. Do not invent thresholds or
   numbers. Explain "on_track", "at_risk", or "over_budget" naturally.
+- When the user asks whether they can afford, should buy, or can safely purchase
+  something, call assess_affordability with the price before answering. Treat its
+  status and remaining-budget figures as authoritative. Do not claim a purchase
+  was made; this tool only analyzes affordability.
 - If the user asks whether they can afford a purchase, compare the requested
   price against the available budget/savings context. If the information is
   insufficient, ask for the missing amount or clarify whether they mean today's
