@@ -54,6 +54,7 @@ TOOL_SPECS = {
     "assess_affordability":      {"method": "POST",   "path": "/api/sara/affordability"},
     "get_financial_goals":        {"method": "GET",    "path": "/api/sara/goals"},
     "create_financial_goal":      {"method": "POST",   "path": "/api/sara/goals"},
+    "get_goal_plan":              {"method": "GET",    "path": "/api/sara/goal-plan"},
     "set_salary":              {"method": "POST",   "path": "/api/settings/salary"},
     "set_savings_percent":     {"method": "POST",   "path": "/api/settings/savings-percent"},
     "log_monthly_expenses":    {"method": "POST",   "path": "/api/monthly-expenses"},
@@ -138,6 +139,11 @@ TOOLS = [
             "current_amount": {"type": "number", "description": "Amount already saved toward this goal, default 0."},
             "target_date": {"type": "string", "description": "Target date in YYYY-MM-DD."},
         }, "required": ["name", "target_amount", "target_date"]},
+    }},
+    {"type": "function", "function": {
+        "name": "get_goal_plan",
+        "description": "Compare the user's active savings goals against current monthly budget capacity and calculate whether each goal is on track.",
+        "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
         "name": "set_salary",
@@ -355,6 +361,9 @@ Rules:
   was made; this tool only analyzes affordability.
 - When the user asks about savings goals, progress toward a goal, or whether they
   are on pace for a target date, call get_financial_goals first.
+- When the user asks whether their current spending can support their goals, or
+  what they need to change to reach a goal, call get_goal_plan. Use its
+  monthly_gap and status as the factual basis for the answer.
 - When the user explicitly asks Sara to create or update a savings goal, use
   create_financial_goal. Confirm what was stored; do not imply that money was
   transferred or saved automatically.
