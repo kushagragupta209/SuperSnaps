@@ -84,6 +84,41 @@ async function processUpdate(update, env) {
     return;
   }
 
+  // Telegram deep-link onboarding: /start <one-time Ledger token>.
+  if (text.startsWith("/start ")) {
+    const token = text.slice(7).trim();
+    if (token) {
+      const endpoint = env.SARA_API_URL.replace(/\/api\/telegram\/sara\/?$/, "/api/telegram/link/complete");
+      const linkResponse = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Telegram-Sara-Secret": env.TELEGRAM_SARA_SECRET,
+        },
+        body: JSON.stringify({chat_id: chatId, token}),
+      });
+
+      const linkResult = await linkResponse.json().catch(() => ({}));
+      await sendTelegramReply(
+        env,
+        chatId,
+        linkResponse.ok && linkResult.linked
+          ? "✅ Your Ledger account is connected. You can now use Sara here."
+          : (linkResult.error || "That linking link is invalid or expired. Generate a new one from Ledger.")
+      );
+      return;
+    }
+  }
+
+  if (text === "/start") {
+    await sendTelegramReply(
+      env,
+      chatId,
+      "Welcome to Super Snaps. Open your Ledger dashboard and use Connect Telegram to link this chat."
+    );
+    return;
+  }
+
   const saraResponse = await fetch(env.SARA_API_URL, {
     method: "POST",
     headers: {
