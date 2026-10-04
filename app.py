@@ -349,13 +349,18 @@ def enforce_api_auth():
         return None
     if auth.get_user_from_token(auth.get_bearer_token(request)):
         return None
-    # Telegram's Cloudflare Worker authenticates with the shared internal
-    # secret. The route itself resolves chat_id -> user_id, so no caller-
-    # supplied user id is trusted here.
-    if request.path == "/api/telegram/sara":
-        internal_secret = request.headers.get("X-Telegram-Sara-Secret")
-        if internal_secret and os.environ.get("TELEGRAM_SARA_SECRET") == internal_secret:
-            return None
+    # Telegram/Sara requests are authenticated with the shared internal
+    # secret. This must also cover Sara's downstream tool calls made through
+    # app.test_client(); otherwise the first Telegram request is accepted but
+    # every tool call (purchases, goals, flights, etc.) is rejected with 401.
+    internal_secret = request.headers.get("X-Telegram-Sara-Secret")
+    internal_user_id = request.headers.get("X-Telegram-User-Id")
+    if (
+        internal_secret
+        and internal_user_id
+        and os.environ.get("TELEGRAM_SARA_SECRET") == internal_secret
+    ):
+        return None
     return jsonify({"error": "Authentication required."}), 401
     return None
 
