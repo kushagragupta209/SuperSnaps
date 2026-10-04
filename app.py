@@ -151,6 +151,18 @@ def _init_db_sqlite():
         -- Flight fare trackers: one row per route/date the user wants to
         -- watch, with the latest and lowest-seen fare cached for fast
         -- reads. Full history lives in flight_price_history.
+        CREATE TABLE IF NOT EXISTS financial_goals (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     TEXT NOT NULL,
+            name        TEXT NOT NULL,
+            target_amount REAL NOT NULL,
+            current_amount REAL NOT NULL DEFAULT 0,
+            target_date TEXT NOT NULL,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            UNIQUE(user_id, name)
+        );
+
         CREATE TABLE IF NOT EXISTS flights (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
             origin         TEXT NOT NULL,
@@ -253,6 +265,18 @@ def _init_db_postgres():
             amount      DOUBLE PRECISION NOT NULL,
             source      TEXT,
             created_at  TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS financial_goals (
+            id          SERIAL PRIMARY KEY,
+            user_id     TEXT NOT NULL,
+            name        TEXT NOT NULL,
+            target_amount DOUBLE PRECISION NOT NULL,
+            current_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+            target_date TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(user_id, name)
         );
 
         CREATE TABLE IF NOT EXISTS flights (
@@ -2221,6 +2245,74 @@ def sara_affordability():
         "savings_target_amount": savings_target,
         "purchase_as_percent_of_salary": savings_impact,
     })
+
+
+@app.route("/api/sara/goals", methods=["GET", "POST"])
+def sara_goals():
+    """List or create user-scoped financial goals for Sara."""
+    user = require_user()
+    db = get_db()
+
+    if request.method == "POST":
+        data = request.get_json(force=True) or {}
+        name = str(data.get("name") or "").strip()
+        target_amount = float(data.get("target_amount") or 0)
+        current_amount = float(data.get("current_amount") or 0)
+        target_date = str(data.get("target_date") or "").strip()
+
+        if not name or target_amount <= 0 or current_amount < 0 or not target_date:
+            return jsonify({"error": "name, positive target_amount, non-negative current_amount, and target_date are required."}), 400
+        try:
+            date.fromisoformat(target_date)
+        except ValueError:
+            return jsonify({"error": "target_date must be YYYY-MM-DD."}), 400
+        if current_amount > target_amount:
+            return jsonify({"error": "current_amount cannot exceed target_amount."}), 400
+
+        now = datetime.utcnow().isoformat()
+        db.execute(
+            "INSERT INTO financial_goals "
+            "(user_id, name, target_amount, current_amount, target_date, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(user_id, name) DO UPDATE SET "
+            "target_amount = excluded.target_amount, current_amount = excluded.current_amount, "
+            "target_date = excluded.target_date, updated_at = excluded.updated_at",
+            (user["id"], name, target_amount, current_amount, target_date, now, now),
+        )
+        db.commit()
+
+    rows = db.execute(
+        "SELECT id, name, target_amount, current_amount, target_date, created_at, updated_at "
+        "FROM financial_goals WHERE user_id = ? ORDER BY target_date ASC, id ASC",
+        (user["id"],),
+    ).fetchall()
+
+    today = date.today()
+    goals = []
+    for row in rows:
+        target = float(row["target_amount"])
+        current = float(row["current_amount"])
+        target_date = date.fromisoformat(row["target_date"])
+        remaining = max(0.0, target - current)
+        days_left = max(0, (target_date - today).days)
+        months_left = max(days_left / 30.4375, 0.0)
+        required_monthly = round(remaining / months_left, 2) if months_left > 0 else (remaining if remaining > 0 else 0)
+        progress = round((current / target) * 100, 1)
+
+        goals.append({
+            "id": row["id"],
+            "name": row["name"],
+            "target_amount": round(target, 2),
+            "current_amount": round(current, 2),
+            "remaining_amount": round(remaining, 2),
+            "target_date": target_date.isoformat(),
+            "days_left": days_left,
+            "progress_percent": progress,
+            "required_monthly_saving": required_monthly,
+            "status": "complete" if remaining <= 0 else "overdue" if days_left == 0 else "in_progress",
+        })
+
+    return jsonify({"goals": goals})
 
 
 # --------------------------------------------------------------------------- #
