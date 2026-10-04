@@ -2315,6 +2315,84 @@ def sara_goals():
     return jsonify({"goals": goals})
 
 
+@app.route("/api/sara/goal-plan", methods=["GET"])
+def sara_goal_plan():
+    """Compare active savings goals with the user's actual budget capacity."""
+    user = require_user()
+    db = get_db()
+    today = date.today()
+    budget = _expense_budget_snapshot(db, today.isoformat(), user["id"])
+
+    salary_row = db.execute(
+        "SELECT value FROM settings WHERE key = 'monthly_salary' AND user_id = ?",
+        (user["id"],),
+    ).fetchone()
+    savings_row = db.execute(
+        "SELECT value FROM settings WHERE key = 'savings_percent' AND user_id = ?",
+        (user["id"],),
+    ).fetchone()
+
+    salary = float(salary_row["value"]) if salary_row else None
+    savings_percent = float(savings_row["value"]) if savings_row else agent.DEFAULT_SAVINGS_PERCENT
+    planned_savings = round(salary * savings_percent / 100.0, 2) if salary else None
+
+    rows = db.execute(
+        "SELECT id, name, target_amount, current_amount, target_date "
+        "FROM financial_goals WHERE user_id = ? ORDER BY target_date ASC, id ASC",
+        (user["id"],),
+    ).fetchall()
+
+    goals = []
+    for row in rows:
+        target = float(row["target_amount"])
+        current = float(row["current_amount"])
+        target_date = date.fromisoformat(row["target_date"])
+        remaining = max(0.0, target - current)
+        days_left = (target_date - today).days
+        months_left = max(days_left / 30.4375, 0.0)
+        required = round(remaining / months_left, 2) if months_left > 0 else remaining
+
+        # The user's current remaining monthly discretionary budget is the
+        # safest available capacity signal; it does not assume unrecorded income.
+        budget_left = budget.get("monthly_left")
+        capacity = max(0.0, float(budget_left)) if budget_left is not None else None
+        gap = round(required - capacity, 2) if capacity is not None else None
+
+        if remaining <= 0:
+            status = "complete"
+        elif days_left < 0:
+            status = "overdue"
+        elif gap is None:
+            status = "insufficient_data"
+        elif gap <= 0:
+            status = "on_track"
+        elif capacity > 0 and gap <= capacity * 0.25:
+            status = "at_risk"
+        else:
+            status = "behind"
+
+        goals.append({
+            "id": row["id"],
+            "name": row["name"],
+            "remaining_amount": round(remaining, 2),
+            "target_date": target_date.isoformat(),
+            "days_left": max(0, days_left),
+            "required_monthly_saving": required,
+            "available_monthly_capacity": round(capacity, 2) if capacity is not None else None,
+            "monthly_gap": gap,
+            "status": status,
+        })
+
+    return jsonify({
+        "today": today.isoformat(),
+        "monthly_salary": salary,
+        "planned_savings_percent": savings_percent,
+        "planned_savings_amount": planned_savings,
+        "budget_monthly_left": budget.get("monthly_left"),
+        "goals": goals,
+    })
+
+
 # --------------------------------------------------------------------------- #
 # Routes — API: Sara (supervisor agent)
 # --------------------------------------------------------------------------- #
