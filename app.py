@@ -8,7 +8,7 @@ Ledger — a local-first personal purchase timeline + monthly expense tracker.
 Run:
     pip install -r requirements.txt
     python app.py
-Then open http://127.0.0.1:5000
+Then open http://127.0.0.1:8000
 
 Natural-language expense parsing lives in agent.py, not here — see that
 file for how to enable the Groq-backed parser and how to add new agent
