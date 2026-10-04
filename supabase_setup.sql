@@ -1,77 +1,148 @@
--- Run this once in your Supabase project's SQL editor.
--- This is the durable "global inbox" the Cloudflare Worker writes into
--- the instant a Telegram message arrives, and that Ledger drains
--- whenever it's launched.
 
-create table if not exists pending_expenses (
-    id                    bigint generated always as identity primary key,
-    chat_id               bigint not null,
-    raw_text              text not null,
-    telegram_message_id   bigint not null,
-    sent_at               timestamptz not null,
-    processed             boolean not null default false,
-    created_at            timestamptz not null default now()
+-- ============================================================
+-- SuperSnaps / Ledger - Supabase Setup
+-- ============================================================
+-- Run this entire script in the Supabase SQL Editor.
+-- It is safe to run multiple times.
+-- ============================================================
+
+
+-- ------------------------------------------------------------
+-- 1. Telegram pending expenses
+-- ------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS pending_expenses (
+    id                  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    chat_id             BIGINT NOT NULL,
+    raw_text            TEXT NOT NULL,
+    telegram_message_id BIGINT NOT NULL,
+    sent_at             TIMESTAMPTZ NOT NULL,
+    processed           BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Speeds up "give me everything unprocessed, oldest first" (what Ledger asks for).
-create index if not exists idx_pending_expenses_unprocessed
-    on pending_expenses (processed, sent_at);
+CREATE INDEX IF NOT EXISTS idx_pending_expenses_unprocessed
+    ON pending_expenses (processed, sent_at);
 
--- Row Level Security: locked down by default. Only the service_role key
--- (used server-side by the Worker and by Ledger) can read/write — never
--- expose the anon/public key for this table.
-alter table pending_expenses enable row level security;
+ALTER TABLE pending_expenses ENABLE ROW LEVEL SECURITY;
 
 
--- Persistent Sara conversation history for Telegram.
--- One chat can have many turns; keeping only the latest 12 messages in
--- the application prompt prevents the context from growing indefinitely.
-create table if not exists telegram_sara_messages (
-    id                    bigint generated always as identity primary key,
-    chat_id               bigint not null,
-    telegram_message_id   bigint,
-    role                  text not null check (role in ('user', 'assistant')),
-    content               text not null,
-    created_at             timestamptz not null default now()
+-- ------------------------------------------------------------
+-- 2. Telegram Sara conversation history
+-- ------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS telegram_sara_messages (
+    id                    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    chat_id               BIGINT NOT NULL,
+    telegram_message_id   BIGINT,
+    role                  TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    content               TEXT NOT NULL,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create index if not exists idx_telegram_sara_messages_chat
-    on telegram_sara_messages (chat_id, id);
+CREATE INDEX IF NOT EXISTS idx_telegram_sara_messages_chat
+    ON telegram_sara_messages (chat_id, id);
 
-alter table telegram_sara_messages enable row level security;
+ALTER TABLE telegram_sara_messages ENABLE ROW LEVEL SECURITY;
 
 
--- Multi-user foundation: application profile linked to Supabase Auth.
--- Financial tables remain untouched in Phase 1 until ownership migration is verified.
-create table if not exists profiles (
-    id uuid primary key references auth.users(id) on delete cascade,
-    email text,
-    display_name text,
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now()
+-- ------------------------------------------------------------
+-- 3. User profiles
+-- ------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS profiles (
+    id UUID PRIMARY KEY
+        REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT,
+    display_name TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-alter table profiles enable row level security;
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
-DO $
+
+-- ------------------------------------------------------------
+-- 4. Profile RLS policies
+-- ------------------------------------------------------------
+
+DO $$
 BEGIN
-    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles_select_own') then
-        create policy profiles_select_own on profiles for select using (auth.uid() = id);
-    end if;
-    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles_insert_own') then
-        create policy profiles_insert_own on profiles for insert with check (auth.uid() = id);
-    end if;
-    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles_update_own') then
-        create policy profiles_update_own on profiles for update using (auth.uid() = id) with check (auth.uid() = id);
-    end if;
-END $;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'profiles'
+          AND policyname = 'profiles_select_own'
+    ) THEN
+
+        CREATE POLICY profiles_select_own
+            ON profiles
+            FOR SELECT
+            USING (auth.uid() = id);
+
+    END IF;
 
 
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'profiles'
+          AND policyname = 'profiles_insert_own'
+    ) THEN
 
--- Map each Telegram chat to exactly one signed-in Ledger account.
-create table if not exists telegram_user_links (
-    chat_id bigint primary key,
-    user_id uuid not null references auth.users(id) on delete cascade,
-    linked_at timestamptz not null default now()
+        CREATE POLICY profiles_insert_own
+            ON profiles
+            FOR INSERT
+            WITH CHECK (auth.uid() = id);
+
+    END IF;
+
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'profiles'
+          AND policyname = 'profiles_update_own'
+    ) THEN
+
+        CREATE POLICY profiles_update_own
+            ON profiles
+            FOR UPDATE
+            USING (auth.uid() = id)
+            WITH CHECK (auth.uid() = id);
+
+    END IF;
+
+END $$;
+
+
+-- ------------------------------------------------------------
+-- 5. Telegram -> Ledger user mapping
+-- ------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS telegram_user_links (
+    chat_id   BIGINT PRIMARY KEY,
+    user_id   UUID NOT NULL
+        REFERENCES auth.users(id) ON DELETE CASCADE,
+    linked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-alter table telegram_user_links enable row level security;
+
+ALTER TABLE telegram_user_links ENABLE ROW LEVEL SECURITY;
+
+
+-- ------------------------------------------------------------
+-- 6. Useful indexes
+-- ------------------------------------------------------------
+
+CREATE INDEX IF NOT EXISTS idx_telegram_user_links_user
+    ON telegram_user_links (user_id);
+
+
+-- ============================================================
+-- Setup complete
+-- ============================================================
+
