@@ -50,6 +50,7 @@ TOOL_SPECS = {
     "delete_purchase":         {"method": "DELETE", "path": "/api/purchases/{purchase_id}", "confirm": True},
     "get_summary":             {"method": "GET",    "path": "/api/summary"},
     "get_financial_context":    {"method": "GET",    "path": "/api/sara/financial-context"},
+    "get_spending_trends":       {"method": "GET",    "path": "/api/sara/spending-trends"},
     "set_salary":              {"method": "POST",   "path": "/api/settings/salary"},
     "set_savings_percent":     {"method": "POST",   "path": "/api/settings/savings-percent"},
     "log_monthly_expenses":    {"method": "POST",   "path": "/api/monthly-expenses"},
@@ -105,6 +106,11 @@ TOOLS = [
     {"type": "function", "function": {
         "name": "get_financial_context",
         "description": "Get one user-scoped financial snapshot for high-level questions like 'how am I doing?' or 'give me my financial overview'. Includes salary/savings target, current-month spending, safe-to-spend budget, top categories, wishlist value, and active flight trackers.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "get_spending_trends",
+        "description": "Analyze the user's current vs previous month discretionary spending, transaction counts, top categories, and category changes.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
@@ -321,8 +327,10 @@ Rules:
   price against the available budget/savings context. If the information is
   insufficient, ask for the missing amount or clarify whether they mean today's
   discretionary budget or their broader savings capacity.
-- For questions about past spending, totals, or trends, use
-  ask_financial_question rather than trying to compute it yourself.
+- For questions about month-over-month spending, spending trends,
+  biggest category changes, or why spending increased/decreased, call
+  get_spending_trends first. Use ask_financial_question for custom historical
+  questions that are not covered by the trend snapshot.
 - After calling tools, reply in plain, friendly language. Never mention SQL,
   JSON, tool names, status codes, or other internal details.
 - Keep replies concise and easy to scan. Use short paragraphs and bullets when
