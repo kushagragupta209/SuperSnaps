@@ -302,6 +302,24 @@ def _init_db_postgres():
             checked_at TEXT NOT NULL
         );
 
+        -- Telegram/Sara multi-user tables.
+        CREATE TABLE IF NOT EXISTS telegram_sara_messages (
+            id                    SERIAL PRIMARY KEY,
+            chat_id               BIGINT NOT NULL,
+            telegram_message_id   BIGINT,
+            role                  TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+            content               TEXT NOT NULL,
+            created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_telegram_sara_messages_chat
+            ON telegram_sara_messages (chat_id, id);
+
+        CREATE TABLE IF NOT EXISTS telegram_user_links (
+            chat_id   BIGINT PRIMARY KEY,
+            user_id   UUID NOT NULL,
+            linked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
         -- Telegram's durable inbox (see telegram_sync.py) — written by the
         -- Cloudflare Worker via Supabase's REST API, read here directly.
         CREATE TABLE IF NOT EXISTS pending_expenses (
