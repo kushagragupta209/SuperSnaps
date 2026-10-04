@@ -49,6 +49,7 @@ TOOL_SPECS = {
     "add_purchase":            {"method": "POST",   "path": "/api/purchases"},
     "delete_purchase":         {"method": "DELETE", "path": "/api/purchases/{purchase_id}", "confirm": True},
     "get_summary":             {"method": "GET",    "path": "/api/summary"},
+    "get_financial_context":    {"method": "GET",    "path": "/api/sara/financial-context"},
     "set_salary":              {"method": "POST",   "path": "/api/settings/salary"},
     "set_savings_percent":     {"method": "POST",   "path": "/api/settings/savings-percent"},
     "log_monthly_expenses":    {"method": "POST",   "path": "/api/monthly-expenses"},
@@ -99,6 +100,11 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "year": {"type": "integer"}, "month": {"type": "integer"},
         }},
+    }},
+    {"type": "function", "function": {
+        "name": "get_financial_context",
+        "description": "Get one user-scoped financial snapshot for high-level questions like 'how am I doing?' or 'give me my financial overview'. Includes salary/savings target, current-month spending, safe-to-spend budget, top categories, wishlist value, and active flight trackers.",
+        "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
         "name": "set_salary",
@@ -302,6 +308,10 @@ Rules:
   it) to see what it targets, then ask the user to confirm in plain language
   before trying again with confirmed=true.
 - When processing Telegram expense logging/sync, use sync_telegram_expenses. After a successful save, clearly tell the user the amount left for the day and month when budget data is configured, and mention their top spending category/categories from the monthly category breakdown.
+- For broad financial-health, budget-status, or "how am I doing?" questions,
+  call get_financial_context first. Use its snapshot as the factual basis for
+  your answer, and call more specific tools only when the user asks for deeper
+  detail.
 - For questions about past spending, totals, or trends, use
   ask_financial_question rather than trying to compute it yourself.
 - After calling tools, reply in plain, friendly language. Never mention SQL,
