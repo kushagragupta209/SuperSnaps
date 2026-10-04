@@ -2048,6 +2048,96 @@ def sara_financial_context():
     })
 
 
+@app.route("/api/sara/spending-trends", methods=["GET"])
+def sara_spending_trends():
+    """Return deterministic, user-scoped spending trends for Sara."""
+    user = require_user()
+    db = get_db()
+    today = date.today()
+
+    def month_shift(year, month, delta):
+        index = year * 12 + (month - 1) + delta
+        return index // 12, index % 12 + 1
+
+    def month_snapshot(year, month):
+        prefix = f"{year:04d}-{month:02d}"
+        purchases = db.execute(
+            "SELECT COALESCE(SUM(price), 0) AS total, COUNT(*) AS count "
+            "FROM purchases WHERE purchased_on LIKE ? AND user_id = ?",
+            (f"{prefix}%", user["id"]),
+        ).fetchone()
+        daily = db.execute(
+            "SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count "
+            "FROM day_expenses WHERE date LIKE ? AND user_id = ?",
+            (f"{prefix}%", user["id"]),
+        ).fetchone()
+        fixed = db.execute(
+            "SELECT COALESCE(SUM(amount), 0) AS total "
+            "FROM monthly_expenses WHERE year = ? AND month = ? AND user_id = ?",
+            (year, month, user["id"]),
+        ).fetchone()
+        categories = db.execute(
+            "SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') AS category, "
+            "COALESCE(SUM(amount), 0) AS amount "
+            "FROM day_expenses WHERE date LIKE ? AND user_id = ? "
+            "GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') "
+            "ORDER BY amount DESC",
+            (f"{prefix}%", user["id"]),
+        ).fetchall()
+        discretionary = float(purchases["total"] or 0) + float(daily["total"] or 0)
+        return {
+            "year": year,
+            "month": month,
+            "purchases": round(float(purchases["total"] or 0), 2),
+            "day_expenses": round(float(daily["total"] or 0), 2),
+            "discretionary_spending": round(discretionary, 2),
+            "fixed_expenses": round(float(fixed["total"] or 0), 2),
+            "transaction_count": int(purchases["count"] or 0) + int(daily["count"] or 0),
+            "categories": [
+                {"category": row["category"], "amount": round(float(row["amount"] or 0), 2)}
+                for row in categories
+            ],
+        }
+
+    current = month_snapshot(today.year, today.month)
+    previous_year, previous_month = month_shift(today.year, today.month, -1)
+    previous = month_snapshot(previous_year, previous_month)
+
+    change = round(
+        current["discretionary_spending"] - previous["discretionary_spending"], 2
+    )
+    pct_change = (
+        round((change / previous["discretionary_spending"]) * 100, 1)
+        if previous["discretionary_spending"] else None
+    )
+
+    previous_categories = {
+        item["category"]: item["amount"] for item in previous["categories"]
+    }
+    category_changes = []
+    for item in current["categories"]:
+        old = previous_categories.get(item["category"], 0)
+        category_changes.append({
+            "category": item["category"],
+            "current": item["amount"],
+            "previous": round(old, 2),
+            "change": round(item["amount"] - old, 2),
+            "pct_change": round(((item["amount"] - old) / old) * 100, 1) if old else None,
+        })
+    category_changes.sort(key=lambda item: item["change"], reverse=True)
+
+    return jsonify({
+        "current_month": current,
+        "previous_month": previous,
+        "month_over_month": {
+            "change": change,
+            "percent_change": pct_change,
+            "direction": "up" if change > 0 else "down" if change < 0 else "flat",
+        },
+        "category_changes": category_changes[:10],
+    })
+
+
 # --------------------------------------------------------------------------- #
 # Routes — API: Sara (supervisor agent)
 # --------------------------------------------------------------------------- #
