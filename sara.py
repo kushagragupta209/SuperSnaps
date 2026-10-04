@@ -98,7 +98,8 @@ TOOLS = [
         "name": "get_summary",
         "description": "Dashboard totals: all-time/month/YTD purchase spend, fixed expenses, salary percentages.",
         "parameters": {"type": "object", "properties": {
-            "year": {"type": "integer"}, "month": {"type": "integer"},
+            "year": {"type": ["integer", "null"], "description": "Optional calendar year. Use null for the current year."},
+            "month": {"type": ["integer", "null"], "description": "Optional calendar month (1-12). Use null for the current month."},
         }},
     }},
     {"type": "function", "function": {
@@ -125,7 +126,8 @@ TOOLS = [
         "description": "Record this month's recurring/fixed expenses from a free-form sentence, e.g. '12k rent, 5k food, 3000 fuel'. Replaces any existing entries for that month.",
         "parameters": {"type": "object", "properties": {
             "text": {"type": "string"},
-            "year": {"type": "integer"}, "month": {"type": "integer"},
+            "year": {"type": ["integer", "null"], "description": "Optional calendar year. Use null to use the current year."},
+            "month": {"type": ["integer", "null"], "description": "Optional calendar month (1-12). Use null to use the current month."},
         }, "required": ["text"]},
     }},
     {"type": "function", "function": {
