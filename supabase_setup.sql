@@ -53,8 +53,8 @@ create table if not exists profiles (
 
 alter table profiles enable row level security;
 
-do $
-begin
+DO $
+BEGIN
     if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles_select_own') then
         create policy profiles_select_own on profiles for select using (auth.uid() = id);
     end if;
@@ -64,10 +64,8 @@ begin
     if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles_update_own') then
         create policy profiles_update_own on profiles for update using (auth.uid() = id) with check (auth.uid() = id);
     end if;
-end $;
+END $;
 
-create policy if not exists profiles_update_own on profiles
-    for update using (auth.uid() = id) with check (auth.uid() = id);
 
 
 -- Map each Telegram chat to exactly one signed-in Ledger account.
