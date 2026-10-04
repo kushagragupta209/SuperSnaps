@@ -548,7 +548,10 @@
       <div class="eyebrow">Personal Finance</div>
       <h1>Super Snaps</h1>
     </div>
-    <div class="today" id="todayLabel"></div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <button class="btn-ghost" id="btnConnectTelegram" type="button">✈ Connect Telegram</button>
+      <div class="today" id="todayLabel"></div>
+    </div>
   </header>
 
 
@@ -2212,6 +2215,36 @@ document.getElementById('confirmAddBtn').onclick = async () => {
   modal.classList.remove('open');
   refreshAll();
 };
+/* ---------- Telegram Account Linking ---------- */
+async function connectTelegram(){
+  const btn=document.getElementById('btnConnectTelegram');
+  if(!btn) return;
+  btn.disabled=true; btn.textContent='Generating link…';
+  try{
+    const r=await authFetch('/api/telegram/link-token',{method:'POST'});
+    const d=await r.json();
+    if(!r.ok || !d.deep_link){
+      throw new Error(d.error || 'Telegram bot is not configured yet. Set TELEGRAM_BOT_USERNAME on Render.');
+    }
+    const opened=window.open(d.deep_link,'_blank','noopener,noreferrer');
+    if(!opened){
+      // Popup blockers may prevent window.open; expose the link without
+      // putting the one-time token into page HTML beyond this short-lived UI.
+      const link=document.createElement('a');
+      link.href=d.deep_link; link.target='_blank'; link.rel='noopener noreferrer';
+      link.textContent='Open Telegram to finish linking';
+      link.style.cssText='display:block;margin-top:8px;color:var(--paper-green-dark);font-size:12px;';
+      btn.parentElement.appendChild(link);
+    }
+    btn.textContent='Telegram link generated';
+    setTimeout(()=>{btn.textContent='✈ Connect Telegram';btn.disabled=false;},4000);
+  }catch(e){
+    alert(e.message || 'Could not create Telegram link.');
+    btn.disabled=false; btn.textContent='✈ Connect Telegram';
+  }
+}
+document.getElementById('btnConnectTelegram')?.addEventListener('click',connectTelegram);
+
 /* ---------- Financial Chatbot ---------- */
 async function sendChatMessage() {
   const input = document.getElementById('chatInput');
